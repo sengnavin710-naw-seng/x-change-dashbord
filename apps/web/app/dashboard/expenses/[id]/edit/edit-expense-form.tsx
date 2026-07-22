@@ -1,0 +1,127 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+
+import { Button } from "@repo/ui/button";
+import { Input } from "@repo/ui/input";
+
+import { trpc } from "@/trpc/client";
+
+const selectClass =
+  "h-11 w-full rounded-[4px] border border-[var(--hairline-soft)] bg-white px-3 text-sm text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2]";
+
+interface ExpenseRecord {
+  amount: string;
+  currency: "MMK" | "THB";
+  description: string;
+  id: string;
+  transactionDate: string;
+}
+
+function value(form: FormData, name: string) {
+  return String(form.get(name) ?? "").trim();
+}
+
+export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>) {
+  const router = useRouter();
+  const mutation = trpc.operations.updateExpense.useMutation();
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError(null);
+    try {
+      await mutation.mutateAsync({
+        amount: value(form, "amount"),
+        currency: value(form, "currency") as ExpenseRecord["currency"],
+        description: value(form, "description"),
+        id: record.id,
+        reason: value(form, "reason"),
+        transactionDate: value(form, "transactionDate"),
+      });
+      router.push("/dashboard/expenses");
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "စာရင်းကို ပြင်၍မရပါ");
+    }
+  }
+
+  return (
+    <form className="max-w-[780px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
+      <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-7">
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">ရက်စွဲ / Date</span>
+          <Input
+            defaultValue={record.transactionDate}
+            disabled={mutation.isPending}
+            name="transactionDate"
+            required
+            type="date"
+          />
+        </label>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">ငွေကြေး / Currency</span>
+          <select
+            className={selectClass}
+            defaultValue={record.currency}
+            disabled={mutation.isPending}
+            name="currency"
+          >
+            <option value="THB">THB</option>
+            <option value="MMK">MMK</option>
+          </select>
+        </label>
+        <label className="space-y-2 sm:col-span-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">ကုန်ကျငွေ / Amount</span>
+          <Input
+            defaultValue={record.amount}
+            disabled={mutation.isPending}
+            inputMode="decimal"
+            name="amount"
+            required
+          />
+        </label>
+        <label className="space-y-2 sm:col-span-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">
+            မှတ်ချက် / Description
+          </span>
+          <Input
+            defaultValue={record.description}
+            disabled={mutation.isPending}
+            name="description"
+            required
+          />
+        </label>
+        <label className="space-y-2 sm:col-span-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">
+            ပြင်ဆင်ရသည့်အကြောင်းရင်း / Edit reason
+          </span>
+          <Input disabled={mutation.isPending} minLength={3} name="reason" required />
+        </label>
+      </div>
+      {error ? (
+        <p
+          className="mx-5 mb-5 border-l-4 border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm sm:mx-7"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-col-reverse gap-3 border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+        <Button
+          disabled={mutation.isPending}
+          onClick={() => router.back()}
+          type="button"
+          variant="outline"
+        >
+          မလုပ်တော့ပါ / Cancel
+        </Button>
+        <Button disabled={mutation.isPending} type="submit">
+          {mutation.isPending ? "ပြင်နေသည်… / Updating…" : "ပြင်ဆင်ရန် / Update record"}
+        </Button>
+      </div>
+    </form>
+  );
+}
