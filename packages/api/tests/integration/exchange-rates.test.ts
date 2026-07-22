@@ -6,7 +6,7 @@ import {
   exchangeRateVersion,
   exchangeTransaction,
   expense,
-  openingBalance,
+  balanceConfiguration,
   recordRevision,
   user,
 } from "@repo/db";
@@ -30,7 +30,7 @@ beforeEach(async () => {
   await connection.db.delete(cashBankTransaction);
   await connection.db.delete(exchangeTransaction);
   await connection.db.delete(expense);
-  await connection.db.delete(openingBalance);
+  await connection.db.delete(balanceConfiguration);
   await connection.db.delete(exchangeRateVersion);
   await connection.db.delete(user);
   await connection.db.insert(user).values({

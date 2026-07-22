@@ -4,7 +4,23 @@ import {
   calculateCashBank,
   calculateExchange,
   calculateExchangeRateConfiguration,
+  normalizeMoneyInput,
 } from "../../src/index";
+
+describe("money input normalization", () => {
+  test("removes grouping separators before opening balances reach the API", () => {
+    expect(["235,299", "5,918,129", "128,200", "17,407,355"].map(normalizeMoneyInput)).toEqual([
+      "235299",
+      "5918129",
+      "128200",
+      "17407355",
+    ]);
+  });
+
+  test("preserves a decimal point and removes pasted whitespace", () => {
+    expect(normalizeMoneyInput(" 235,299.0000 ")).toBe("235299.0000");
+  });
+});
 
 describe("exchange calculation", () => {
   test("derives shop margins from the purchase, selling, and buying rates", () => {

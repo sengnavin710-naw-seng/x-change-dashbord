@@ -4,7 +4,7 @@ import { EntryForm } from "./entry-form";
 import { getYangonDateTime } from "@/lib/exchange-rate";
 
 export const metadata: Metadata = {
-  title: "စာရင်းအသစ် · New entry",
+  title: "New Entry",
 };
 
 export default function NewEntryPage() {
@@ -16,7 +16,7 @@ export default function NewEntryPage() {
           Create record
         </p>
         <h1 className="mt-3 font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          စာရင်းအသစ်
+          New Entry
         </h1>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">New operational entry</p>
       </header>

@@ -1,10 +1,11 @@
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { cashBankTransaction, exchangeTransaction, expense, openingBalance } from "@repo/db";
+import { balanceConfiguration, cashBankTransaction, exchangeTransaction, expense } from "@repo/db";
 
 import { createTRPCRouter, protectedProcedure } from "./trpc";
 import { addMoney } from "./operations";
+import { effectiveTransactionAt } from "./transaction-time";
 
 const dateSchema = z
   .string()
@@ -13,13 +14,20 @@ const dateSchema = z
 
 const totalSchema = z.object({ value: z.string() });
 
+function previousCalendarDate(date: string) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10);
+}
+
 export const dashboardRouter = createTRPCRouter({
   today: protectedProcedure.input(z.object({ date: dateSchema })).query(async ({ ctx, input }) => {
-    const [opening] = await ctx.database
+    const monthStartDate = `${input.date.slice(0, 7)}-01`;
+    const [configuration] = await ctx.database
       .select()
-      .from(openingBalance)
-      .where(lte(openingBalance.effectiveDate, input.date))
-      .orderBy(desc(openingBalance.effectiveDate))
+      .from(balanceConfiguration)
+      .where(lte(balanceConfiguration.calculationStartDate, input.date))
+      .orderBy(desc(balanceConfiguration.calculationStartDate))
       .limit(1);
 
     const [exchangeProfit] = await ctx.database
@@ -34,7 +42,7 @@ export const dashboardRouter = createTRPCRouter({
         ),
       );
 
-    const [exchangeMovement] = opening
+    const [exchangeMovement] = configuration
       ? await ctx.database
           .select({
             mmk: sql<string>`coalesce(sum(case when ${exchangeTransaction.direction} = 'mmk-to-thb' then ${exchangeTransaction.sourceAmount} else -${exchangeTransaction.actualPayout} end), 0)::numeric(20, 4)::text`,
@@ -43,7 +51,7 @@ export const dashboardRouter = createTRPCRouter({
           .from(exchangeTransaction)
           .where(
             and(
-              gte(exchangeTransaction.transactionDate, opening.effectiveDate),
+              gte(exchangeTransaction.transactionDate, configuration.calculationStartDate),
               lte(exchangeTransaction.transactionDate, input.date),
               isNull(exchangeTransaction.voidedAt),
             ),
@@ -59,6 +67,7 @@ export const dashboardRouter = createTRPCRouter({
         formulaProfitThb: exchangeTransaction.formulaProfitThb,
         id: exchangeTransaction.id,
         sourceAmount: exchangeTransaction.sourceAmount,
+        transactionAt: exchangeTransaction.transactionAt,
         transactionDate: exchangeTransaction.transactionDate,
       })
       .from(exchangeTransaction)
@@ -79,6 +88,7 @@ export const dashboardRouter = createTRPCRouter({
         feeAmount: cashBankTransaction.feeAmount,
         id: cashBankTransaction.id,
         principalAmount: cashBankTransaction.principalAmount,
+        transactionAt: cashBankTransaction.transactionAt,
         transactionDate: cashBankTransaction.transactionDate,
       })
       .from(cashBankTransaction)
@@ -97,6 +107,7 @@ export const dashboardRouter = createTRPCRouter({
         currency: expense.currency,
         description: expense.description,
         id: expense.id,
+        transactionAt: expense.transactionAt,
         transactionDate: expense.transactionDate,
       })
       .from(expense)
@@ -123,42 +134,91 @@ export const dashboardRouter = createTRPCRouter({
       .from(expense)
       .where(and(eq(expense.transactionDate, input.date), isNull(expense.voidedAt)));
 
+    const [monthlyExchangeProfit] = await ctx.database
+      .select({
+        value: sql<string>`coalesce(sum(${exchangeTransaction.formulaProfitThb}), 0)::numeric(20, 4)::text`,
+      })
+      .from(exchangeTransaction)
+      .where(
+        and(
+          gte(exchangeTransaction.transactionDate, monthStartDate),
+          lte(exchangeTransaction.transactionDate, input.date),
+          isNull(exchangeTransaction.voidedAt),
+        ),
+      );
+    const [monthlyCashBankFees] = await ctx.database
+      .select({
+        mmk: sql<string>`coalesce(sum(case when ${cashBankTransaction.currency} = 'MMK' then ${cashBankTransaction.feeAmount} else 0 end), 0)::numeric(20, 4)::text`,
+        thb: sql<string>`coalesce(sum(case when ${cashBankTransaction.currency} = 'THB' then ${cashBankTransaction.feeAmount} else 0 end), 0)::numeric(20, 4)::text`,
+      })
+      .from(cashBankTransaction)
+      .where(
+        and(
+          gte(cashBankTransaction.transactionDate, monthStartDate),
+          lte(cashBankTransaction.transactionDate, input.date),
+          isNull(cashBankTransaction.voidedAt),
+        ),
+      );
+
     const exchangeTotal = totalSchema.parse(exchangeProfit ?? { value: "0" }).value;
+    const monthlyExchangeTotal = totalSchema.parse(monthlyExchangeProfit ?? { value: "0" }).value;
 
     return {
-      balance: opening
+      balanceConfiguration: configuration
         ? {
-            mmk: addMoney(opening.operationalMmk, exchangeMovement?.mmk ?? "0"),
-            thb: addMoney(opening.operationalThb, exchangeMovement?.thb ?? "0"),
+            calculationStartDate: configuration.calculationStartDate,
+            checkpointDate: previousCalendarDate(configuration.calculationStartDate),
+            checkpointMmk: configuration.checkpointMmk,
+            checkpointThb: configuration.checkpointThb,
+            note: configuration.note,
+            openingMmk: configuration.openingMmk,
+            openingThb: configuration.openingThb,
+          }
+        : null,
+      closingBalance: configuration
+        ? {
+            mmk: addMoney(configuration.checkpointMmk, exchangeMovement?.mmk ?? "0"),
+            thb: addMoney(configuration.checkpointThb, exchangeMovement?.thb ?? "0"),
           }
         : null,
       date: input.date,
-      openingBalance: opening
-        ? {
-            effectiveDate: opening.effectiveDate,
-            operationalMmk: opening.operationalMmk,
-            operationalThb: opening.operationalThb,
-            reconciled: opening.reconciled,
-            referenceMmk: opening.referenceMmk,
-            referenceThb: opening.referenceThb,
-          }
-        : null,
+      profitThisMonth: {
+        fromDate: monthStartDate,
+        mmk: monthlyCashBankFees?.mmk ?? "0.0000",
+        thb: addMoney(monthlyExchangeTotal, monthlyCashBankFees?.thb ?? "0.0000"),
+        toDate: input.date,
+      },
       recentTransactions: [
         ...recentExchanges.map((transaction) => ({
           ...transaction,
+          transactionAt: transaction.transactionAt.toISOString(),
           type: "exchange" as const,
         })),
         ...recentCashBank.map((transaction) => ({
           ...transaction,
+          transactionAt: effectiveTransactionAt(
+            transaction.transactionDate,
+            transaction.transactionAt,
+            transaction.createdAt,
+          ).toISOString(),
           type: "cash-bank" as const,
         })),
         ...recentExpenses.map((transaction) => ({
           ...transaction,
+          transactionAt: effectiveTransactionAt(
+            transaction.transactionDate,
+            transaction.transactionAt,
+            transaction.createdAt,
+          ).toISOString(),
           type: "expense" as const,
         })),
       ]
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-        .slice(0, 8),
+        .sort((left, right) => Date.parse(right.transactionAt) - Date.parse(left.transactionAt))
+        .slice(0, 8)
+        .map((transaction) => ({
+          ...transaction,
+          createdAt: transaction.createdAt.toISOString(),
+        })),
       totals: {
         cashBankFeeMmk: cashBankFees?.mmk ?? "0.0000",
         cashBankFeeThb: cashBankFees?.thb ?? "0.0000",

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { inferRouterOutputs } from "@trpc/server";
 
 import type { AppRouter } from "@repo/api";
@@ -30,17 +30,10 @@ function value(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
 }
 
-function Field({
-  children,
-  english,
-  label,
-}: Readonly<{ children: React.ReactNode; english: string; label: string }>) {
+function Field({ children, label }: Readonly<{ children: React.ReactNode; label: string }>) {
   return (
-    <label className="block space-y-2">
-      <span className="block text-sm font-semibold text-[var(--ink)]">{label}</span>
-      <span className="block text-[10px] font-medium tracking-[0.04em] text-[var(--ink-muted)] uppercase">
-        {english}
-      </span>
+    <label className="grid content-start gap-2">
+      <span className="text-sm font-semibold text-[var(--ink)]">{label}</span>
       {children}
     </label>
   );
@@ -49,9 +42,23 @@ function Field({
 export function EntryForm({
   defaultDate,
   defaultTime,
-}: Readonly<{ defaultDate: string; defaultTime: string }>) {
+  embedded = false,
+  initialEntryType = "exchange",
+  onPendingChange,
+  onSaved,
+  showTypeSelector = true,
+}: Readonly<{
+  defaultDate: string;
+  defaultTime: string;
+  embedded?: boolean;
+  initialEntryType?: EntryType;
+  onPendingChange?: (pending: boolean) => void;
+  onSaved?: () => void;
+  showTypeSelector?: boolean;
+}>) {
   const router = useRouter();
-  const [entryType, setEntryType] = useState<EntryType>("exchange");
+  const utils = trpc.useUtils();
+  const [entryType, setEntryType] = useState<EntryType>(initialEntryType);
   const [cashCurrency, setCashCurrency] = useState<"MMK" | "THB">("MMK");
   const [direction, setDirection] = useState<Direction>("thb-to-mmk");
   const [transactionDate, setTransactionDate] = useState(defaultDate);
@@ -80,6 +87,12 @@ export function EntryForm({
   const createCashBank = trpc.operations.createCashBank.useMutation();
   const createExpense = trpc.operations.createExpense.useMutation();
   const isPending = createExchange.isPending || createCashBank.isPending || createExpense.isPending;
+
+  useEffect(() => {
+    onPendingChange?.(isPending);
+    return () => onPendingChange?.(false);
+  }, [isPending, onPendingChange]);
+
   const selectedRate = staleRates?.keepOld ? staleRates.old : rateQuery.data;
   const defaultSpread = selectedRate
     ? direction === "thb-to-mmk"
@@ -137,7 +150,7 @@ export function EntryForm({
           transactionAt,
         });
         setSuccess(
-          `သိမ်းပြီးပါပြီ / Saved · Formula profit ${result.formulaProfitThb} THB · Settlement comparison ${result.actualSettlementProfitThb} THB`,
+          `Saved · Profit ${result.formulaProfitThb} THB · Actual settlement ${result.actualSettlementProfitThb} THB`,
         );
         resetExchangeState();
       } else if (entryType === "cash-bank") {
@@ -147,9 +160,9 @@ export function EntryForm({
           direction: value(form, "direction") as "bank-to-cash" | "cash-to-bank",
           feeRate: value(form, "feeRate"),
           principalAmount: value(form, "principalAmount"),
-          transactionDate: value(form, "transactionDate"),
+          transactionAt,
         });
-        setSuccess(`သိမ်းပြီးပါပြီ / Saved · Fee ${result.feeAmount} ${result.currency}`);
+        setSuccess(`Saved · Profit ${result.feeAmount} ${result.currency}`);
         formElement.reset();
         setCashCurrency("MMK");
       } else {
@@ -157,12 +170,14 @@ export function EntryForm({
           amount: value(form, "amount"),
           currency: value(form, "currency") as "MMK" | "THB",
           description: value(form, "description"),
-          transactionDate: value(form, "transactionDate"),
+          transactionAt,
         });
-        setSuccess(`သိမ်းပြီးပါပြီ / Saved · ${result.amount} ${result.currency}`);
+        setSuccess(`Saved · ${result.amount} ${result.currency}`);
         formElement.reset();
       }
+      await utils.dashboard.today.invalidate();
       router.refresh();
+      onSaved?.();
     } catch (cause) {
       if (
         entryType === "exchange" &&
@@ -177,95 +192,90 @@ export function EntryForm({
           return;
         }
       }
-      setError(
-        cause instanceof Error ? cause.message : "စာရင်းကို မသိမ်းနိုင်ပါ / Unable to save entry",
-      );
+      setError(cause instanceof Error ? cause.message : "Unable to save entry");
     }
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,820px)]">
-      <div className="h-fit border border-[var(--hairline)] bg-[#f4f7fb] p-2">
-        {(
-          [
-            { english: "Exchange", myanmar: "ငွေလဲလှယ်မှု", value: "exchange" },
-            { english: "Cash ↔ Bank", myanmar: "ငွေသား ↔ ဘဏ်", value: "cash-bank" },
-            { english: "Expense", myanmar: "ကုန်ကျစရိတ်", value: "expense" },
-          ] as const
-        ).map((option) => (
-          <button
-            aria-pressed={entryType === option.value}
-            className={`w-full border-l-2 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset ${entryType === option.value ? "border-[var(--primary)] bg-white" : "border-transparent hover:bg-white"}`}
-            key={option.value}
-            onClick={() => {
-              setEntryType(option.value);
-              setError(null);
-              setSuccess(null);
-            }}
-            type="button"
-          >
-            <span className="block text-sm font-semibold text-[var(--ink)]">{option.myanmar}</span>
-            <span className="mt-1 block text-[10px] text-[var(--ink-muted)] uppercase">
-              {option.english}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <form className="border border-[var(--hairline)] bg-white" onSubmit={submit}>
-        <div className="border-b border-[var(--hairline)] px-5 py-5 sm:px-7">
-          <p className="text-xs font-semibold tracking-[0.08em] text-[var(--primary)] uppercase">
-            {entryType}
-          </p>
-          <h2 className="mt-2 font-[var(--font-display)] text-2xl font-medium text-[var(--ink)]">
-            {entryType === "exchange"
-              ? "ငွေလဲလှယ်မှု စာရင်းသွင်းရန်"
-              : entryType === "cash-bank"
-                ? "ငွေသားနှင့် ဘဏ် စာရင်းသွင်းရန်"
-                : "ကုန်ကျစရိတ် စာရင်းသွင်းရန်"}
-          </h2>
+    <div className={embedded ? "w-full" : "max-w-[720px] space-y-6"}>
+      {showTypeSelector ? (
+        <div className="h-fit border border-[var(--hairline)] bg-[#f4f7fb] p-2">
+          {(
+            [
+              { label: "Exchange", value: "exchange" },
+              { label: "Cash ↔ Bank", value: "cash-bank" },
+              { label: "Expenses", value: "expense" },
+            ] as const
+          ).map((option) => (
+            <button
+              aria-pressed={entryType === option.value}
+              className={`w-full border-l-2 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset ${entryType === option.value ? "border-[var(--primary)] bg-white" : "border-transparent hover:bg-white"}`}
+              key={option.value}
+              onClick={() => {
+                setEntryType(option.value);
+                setError(null);
+                setSuccess(null);
+              }}
+              type="button"
+            >
+              <span className="block text-sm font-semibold text-[var(--ink)]">{option.label}</span>
+            </button>
+          ))}
         </div>
+      ) : null}
 
-        <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-7">
-          <Field english="Transaction date" label="ရက်စွဲ">
-            {entryType === "exchange" ? (
-              <Input
-                disabled={isPending}
-                name="transactionDate"
-                onChange={(event) => {
-                  setTransactionDate(event.target.value);
-                  setStaleRates(null);
-                }}
-                required
-                type="date"
-                value={transactionDate}
-              />
-            ) : (
-              <Input
-                defaultValue={defaultDate}
-                disabled={isPending}
-                name="transactionDate"
-                required
-                type="date"
-              />
-            )}
+      <form
+        className={embedded ? "bg-white" : "border border-[var(--hairline)] bg-white"}
+        onSubmit={submit}
+      >
+        {!embedded ? (
+          <div className="border-b border-[var(--hairline)] px-5 py-5 sm:px-7">
+            <p className="text-xs font-semibold tracking-[0.08em] text-[var(--primary)] uppercase">
+              New Entry
+            </p>
+            <h2 className="mt-2 font-[var(--font-display)] text-2xl font-medium text-[var(--ink)]">
+              {entryType === "exchange"
+                ? "Exchange"
+                : entryType === "cash-bank"
+                  ? "Cash ↔ Bank"
+                  : "Expenses"}
+            </h2>
+          </div>
+        ) : null}
+
+        <div className="grid items-start gap-5 p-5 sm:p-7">
+          <Field label="Date">
+            <Input
+              autoFocus={embedded}
+              disabled={isPending}
+              name="transactionDate"
+              onChange={(event) => {
+                setTransactionDate(event.target.value);
+                setStaleRates(null);
+              }}
+              required
+              type="date"
+              value={transactionDate}
+            />
+          </Field>
+
+          <Field label="Time">
+            <Input
+              disabled={isPending}
+              name="transactionTime"
+              onChange={(event) => {
+                setTransactionTime(event.target.value);
+                setStaleRates(null);
+              }}
+              required
+              type="time"
+              value={transactionTime}
+            />
           </Field>
 
           {entryType === "exchange" ? (
             <>
-              <Field english="Transaction time · Asia/Yangon" label="အချိန်">
-                <Input
-                  disabled={isPending}
-                  onChange={(event) => {
-                    setTransactionTime(event.target.value);
-                    setStaleRates(null);
-                  }}
-                  required
-                  type="time"
-                  value={transactionTime}
-                />
-              </Field>
-              <Field english="Direction" label="ငွေလဲ ဦးတည်ချက်">
+              <Field label="Direction">
                 <select
                   className={selectClass}
                   disabled={isPending}
@@ -276,11 +286,11 @@ export function EntryForm({
                   }}
                   value={direction}
                 >
-                  <option value="thb-to-mmk">THB → MMK</option>
-                  <option value="mmk-to-thb">MMK → THB</option>
+                  <option value="thb-to-mmk">THB to MMK</option>
+                  <option value="mmk-to-thb">MMK to THB</option>
                 </select>
               </Field>
-              <Field english="Source amount" label="လက်ခံငွေ">
+              <Field label={direction === "thb-to-mmk" ? "IN THB" : "IN MMK"}>
                 <Input
                   disabled={isPending}
                   inputMode="decimal"
@@ -291,13 +301,13 @@ export function EntryForm({
                 />
               </Field>
 
-              <div className="sm:col-span-2">
+              <div>
                 {rateQuery.isLoading ? (
                   <div
                     className="border border-[var(--hairline)] bg-[#f4f7fb] p-5 text-sm text-[var(--ink-muted)]"
                     role="status"
                   >
-                    နှုန်းကို ရှာနေသည်… / Finding rate…
+                    Finding rate…
                   </div>
                 ) : rateQuery.error ? (
                   <div
@@ -326,9 +336,7 @@ export function EntryForm({
                         type="button"
                         variant="outline"
                       >
-                        {overrideEnabled
-                          ? "မပြောင်းတော့ပါ / Cancel override"
-                          : "Spread ပြောင်းရန် / Override spread"}
+                        {overrideEnabled ? "Cancel Override" : "Override Spread"}
                       </Button>
                     </div>
                     <div className="grid grid-cols-2 gap-px bg-[var(--hairline)] sm:grid-cols-4">
@@ -336,7 +344,7 @@ export function EntryForm({
                         ["Base", formatRate(selectedRate.baseRate)],
                         ["Spread", formatRate(appliedSpread)],
                         [
-                          "Customer",
+                          direction === "thb-to-mmk" ? "Sell Rate" : "Buy Rate",
                           formatRate(
                             direction === "thb-to-mmk"
                               ? String(Number(selectedRate.baseRate) + Number(appliedSpread))
@@ -365,14 +373,12 @@ export function EntryForm({
                   </div>
                 ) : (
                   <div className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-4">
-                    <p className="font-semibold text-[var(--ink)]">
-                      အသုံးပြုနိုင်သော နှုန်းမရှိပါ။ / No active rate
-                    </p>
+                    <p className="font-semibold text-[var(--ink)]">No active rate</p>
                     <Link
                       className="mt-2 inline-block text-sm font-semibold text-[var(--primary)] underline underline-offset-4"
                       href="/dashboard/exchange-rates"
                     >
-                      ငွေလဲနှုန်း သတ်မှတ်ရန် / Open rate settings
+                      Open Exchange Rate
                     </Link>
                   </div>
                 )}
@@ -380,7 +386,7 @@ export function EntryForm({
 
               {overrideEnabled ? (
                 <>
-                  <Field english="Override spread" label="ပြင်ဆင်ထားသော Spread">
+                  <Field label="Override Spread">
                     <Input
                       disabled={isPending}
                       inputMode="decimal"
@@ -389,7 +395,7 @@ export function EntryForm({
                       value={overrideSpread}
                     />
                   </Field>
-                  <Field english="Required for override" label="ပြောင်းရသည့်အကြောင်းရင်း">
+                  <Field label="Reason">
                     <Input
                       disabled={isPending}
                       minLength={3}
@@ -400,14 +406,14 @@ export function EntryForm({
                   </Field>
                 </>
               ) : null}
-              <Field english="Calculated payout · Excel display" label="တွက်ချက်ထားသော ပေးငွေ">
+              <Field label={direction === "thb-to-mmk" ? "ER MMK" : "OUT THB"}>
                 <Input
                   aria-readonly
                   readOnly
                   value={calculation ? formatWholePayout(calculation.calculatedPayout) : ""}
                 />
               </Field>
-              <Field english="Actual payout · Required" label="အမှန်တကယ် ပေးငွေ">
+              <Field label={direction === "thb-to-mmk" ? "Actual MMK" : "Actual THB"}>
                 <Input
                   disabled={isPending}
                   inputMode="numeric"
@@ -419,15 +425,14 @@ export function EntryForm({
                 />
               </Field>
               {mmkHundredWarning ? (
-                <p className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-3 text-xs leading-5 text-[var(--ink-secondary)] sm:col-span-2">
-                  MMK ပေးငွေသည် ရာပြည့်မဟုတ်ပါ။ · Actual MMK is not a multiple of 100. You may still
-                  save it.
+                <p className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-3 text-xs leading-5 text-[var(--ink-secondary)]">
+                  Actual MMK is not a multiple of 100. You may still save it.
                 </p>
               ) : null}
               {calculation?.actualSettlementProfitThb ? (
-                <div className="grid gap-3 border border-[var(--hairline)] bg-white p-4 text-xs sm:col-span-2 sm:grid-cols-3">
+                <div className="grid gap-3 border border-[var(--hairline)] bg-white p-4 text-xs sm:grid-cols-3">
                   <div>
-                    <p className="text-[var(--ink-muted)]">Formula profit</p>
+                    <p className="text-[var(--ink-muted)]">Profit</p>
                     <p className="mt-1 font-semibold tabular-nums">
                       {calculation.formulaProfitThb} THB
                     </p>
@@ -447,10 +452,8 @@ export function EntryForm({
                 </div>
               ) : null}
               {staleRates ? (
-                <div className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-4 sm:col-span-2">
-                  <p className="font-semibold text-[var(--ink)]">
-                    နှုန်းပြောင်းသွားပါပြီ။ / The active rate changed.
-                  </p>
+                <div className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-4">
+                  <p className="font-semibold text-[var(--ink)]">The active rate changed.</p>
                   <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
                     <p>
                       Displayed: {formatRate(staleRates.old.baseRate)} ·{" "}
@@ -470,7 +473,7 @@ export function EntryForm({
                       size="sm"
                       type="button"
                     >
-                      နှုန်းအသစ်သုံးရန် / Use new rate
+                      Use New Rate
                     </Button>
                     <Button
                       onClick={() => setStaleRates({ ...staleRates, keepOld: true })}
@@ -478,12 +481,12 @@ export function EntryForm({
                       type="button"
                       variant="outline"
                     >
-                      ပြထားသောနှုန်းကို ဆက်သုံးရန် / Keep displayed rate
+                      Keep Displayed Rate
                     </Button>
                   </div>
                   {staleRates.keepOld ? (
                     <div className="mt-4">
-                      <Field english="Required to keep the displayed rate" label="အကြောင်းရင်း">
+                      <Field label="Reason">
                         <Input
                           minLength={3}
                           onChange={(event) => setOverrideReason(event.target.value)}
@@ -498,7 +501,7 @@ export function EntryForm({
             </>
           ) : entryType === "cash-bank" ? (
             <>
-              <Field english="Currency" label="ငွေကြေး">
+              <Field label="Currency">
                 <select
                   className={selectClass}
                   disabled={isPending}
@@ -510,13 +513,13 @@ export function EntryForm({
                   <option value="THB">THB</option>
                 </select>
               </Field>
-              <Field english="Direction" label="လမ်းကြောင်း">
+              <Field label="Direction">
                 <select className={selectClass} disabled={isPending} name="direction" required>
                   <option value="bank-to-cash">Bank In → Cash Out</option>
                   <option value="cash-to-bank">Cash In → Bank Out</option>
                 </select>
               </Field>
-              <Field english="Principal amount" label="မူရင်းငွေပမာဏ">
+              <Field label="Amount">
                 <Input
                   disabled={isPending}
                   inputMode="decimal"
@@ -525,7 +528,7 @@ export function EntryForm({
                   required
                 />
               </Field>
-              <Field english="Fee rate" label="ဝန်ဆောင်ခနှုန်း">
+              <Field label="Fee Rate">
                 <select className={selectClass} disabled={isPending} name="feeRate" required>
                   {cashCurrency === "MMK" ? <option value="0.01">1%</option> : null}
                   {cashCurrency === "THB" ? <option value="0.02">2%</option> : null}
@@ -535,13 +538,13 @@ export function EntryForm({
             </>
           ) : (
             <>
-              <Field english="Currency" label="ငွေကြေး">
+              <Field label="Currency">
                 <select className={selectClass} disabled={isPending} name="currency" required>
                   <option value="THB">THB</option>
                   <option value="MMK">MMK</option>
                 </select>
               </Field>
-              <Field english="Amount" label="ကုန်ကျငွေ">
+              <Field label="Amount">
                 <Input
                   disabled={isPending}
                   inputMode="decimal"
@@ -552,8 +555,8 @@ export function EntryForm({
               </Field>
             </>
           )}
-          <div className="sm:col-span-2">
-            <Field english="Description" label="မှတ်ချက်">
+          <div>
+            <Field label={entryType === "expense" ? "Particular" : "Description"}>
               <Input disabled={isPending} name="description" required={entryType === "expense"} />
             </Field>
           </div>
@@ -574,7 +577,9 @@ export function EntryForm({
             {success}
           </div>
         ) : null}
-        <div className="flex flex-col-reverse gap-3 border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+        <div
+          className={`flex flex-col-reverse gap-3 border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:flex-row sm:justify-end sm:px-7 ${embedded ? "sticky bottom-0 z-10" : ""}`}
+        >
           <Button
             disabled={isPending}
             onClick={() => {
@@ -583,7 +588,7 @@ export function EntryForm({
             type="reset"
             variant="outline"
           >
-            ပြန်ရှင်းရန် / Reset
+            Reset
           </Button>
           <Button
             disabled={
@@ -593,7 +598,7 @@ export function EntryForm({
             }
             type="submit"
           >
-            {isPending ? "သိမ်းနေသည်… / Saving…" : "သိမ်းရန် / Save entry"}
+            {isPending ? "Saving…" : "Save Entry"}
           </Button>
         </div>
       </form>

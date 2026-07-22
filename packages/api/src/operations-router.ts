@@ -1,17 +1,18 @@
-import { and, asc, desc, eq, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import {
+  balanceConfiguration,
   cashBankTransaction,
   exchangeRateVersion,
   exchangeTransaction,
   expense,
-  openingBalance,
   recordRevision,
 } from "@repo/db";
 
 import { calculateCashBank, calculateExchange } from "./operations";
+import { dateInYangon, effectiveTransactionAt } from "./transaction-time";
 import { createTRPCRouter, protectedProcedure } from "./trpc";
 
 const dateSchema = z
@@ -33,17 +34,6 @@ const dateTimeSchema = z.string().refine((value) => !Number.isNaN(Date.parse(val
   message: "Invalid date and time.",
 });
 
-function dateInYangon(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "Asia/Yangon",
-    year: "numeric",
-  }).formatToParts(date);
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}`;
-}
-
 export const operationsRouter = createTRPCRouter({
   createCashBank: protectedProcedure
     .input(
@@ -53,11 +43,12 @@ export const operationsRouter = createTRPCRouter({
         direction: z.enum(["bank-to-cash", "cash-to-bank"]),
         feeRate: rateSchema,
         principalAmount: positiveMoneySchema,
-        transactionDate: dateSchema,
+        transactionAt: dateTimeSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const calculation = calculateCashBank(input);
+      const transactionAt = new Date(input.transactionAt);
 
       return ctx.database.transaction(async (transaction) => {
         const [record] = await transaction
@@ -74,7 +65,8 @@ export const operationsRouter = createTRPCRouter({
             feeAmount: calculation.feeAmount,
             feeRate: input.feeRate,
             principalAmount: input.principalAmount,
-            transactionDate: input.transactionDate,
+            transactionAt,
+            transactionDate: dateInYangon(transactionAt),
             updatedBy: ctx.session.user.id,
           })
           .returning();
@@ -217,10 +209,11 @@ export const operationsRouter = createTRPCRouter({
         amount: positiveMoneySchema,
         currency: z.enum(["THB", "MMK"]),
         description: z.string().trim().min(1).max(500),
-        transactionDate: dateSchema,
+        transactionAt: dateTimeSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const transactionAt = new Date(input.transactionAt);
       return ctx.database.transaction(async (transaction) => {
         const [record] = await transaction
           .insert(expense)
@@ -229,7 +222,8 @@ export const operationsRouter = createTRPCRouter({
             createdBy: ctx.session.user.id,
             currency: input.currency,
             description: input.description,
-            transactionDate: input.transactionDate,
+            transactionAt,
+            transactionDate: dateInYangon(transactionAt),
             updatedBy: ctx.session.user.id,
           })
           .returning();
@@ -250,54 +244,65 @@ export const operationsRouter = createTRPCRouter({
         return record;
       });
     }),
-  createOpeningBalance: protectedProcedure
+  saveBalanceConfiguration: protectedProcedure
     .input(
       z.object({
-        effectiveDate: dateSchema,
+        calculationStartDate: dateSchema,
+        checkpointMmk: moneySchema,
+        checkpointThb: moneySchema,
         note: z.string().trim().max(500).optional(),
-        operationalMmk: moneySchema,
-        operationalThb: moneySchema,
-        referenceMmk: moneySchema,
-        referenceThb: moneySchema,
+        openingMmk: moneySchema,
+        openingThb: moneySchema,
+        reason: z.string().trim().max(500).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const created = await ctx.database.transaction(async (transaction) => {
-        const [record] = await transaction
-          .insert(openingBalance)
-          .values({
-            createdBy: ctx.session.user.id,
-            effectiveDate: input.effectiveDate,
-            note: input.note,
-            operationalMmk: input.operationalMmk,
-            operationalThb: input.operationalThb,
-            referenceMmk: input.referenceMmk,
-            referenceThb: input.referenceThb,
-            updatedBy: ctx.session.user.id,
-          })
-          .onConflictDoNothing()
-          .returning();
+      return ctx.database.transaction(async (transaction) => {
+        const [before] = await transaction
+          .select()
+          .from(balanceConfiguration)
+          .orderBy(
+            desc(balanceConfiguration.calculationStartDate),
+            desc(balanceConfiguration.createdAt),
+          )
+          .limit(1);
 
-        if (!record) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "An opening balance already exists for this date.",
-          });
-        }
+        const values = {
+          calculationStartDate: input.calculationStartDate,
+          checkpointMmk: input.checkpointMmk,
+          checkpointThb: input.checkpointThb,
+          note: input.note ?? null,
+          openingMmk: input.openingMmk,
+          openingThb: input.openingThb,
+          updatedBy: ctx.session.user.id,
+        };
+        const [record] = before
+          ? await transaction
+              .update(balanceConfiguration)
+              .set(values)
+              .where(eq(balanceConfiguration.id, before.id))
+              .returning()
+          : await transaction
+              .insert(balanceConfiguration)
+              .values({ ...values, createdBy: ctx.session.user.id })
+              .returning();
+
+        if (!record) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
         await transaction.insert(recordRevision).values({
-          action: "create",
+          action: before ? "update" : "create",
           actorUserId: ctx.session.user.id,
           after: record,
+          before: before ?? null,
           entity: "opening-balance",
           entityId: record.id,
-          reason: "Opening balance created",
+          reason:
+            input.reason ||
+            (before ? "Balance configuration updated" : "Balance configuration created"),
         });
 
         return record;
       });
-
-      return created;
     }),
   getExchange: protectedProcedure
     .input(z.object({ id: z.uuid() }))
@@ -348,7 +353,17 @@ export const operationsRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cash and bank transaction not found." });
       }
 
-      return record;
+      return {
+        ...record,
+        createdAt: record.createdAt.toISOString(),
+        transactionAt: effectiveTransactionAt(
+          record.transactionDate,
+          record.transactionAt,
+          record.createdAt,
+        ).toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+        voidedAt: record.voidedAt?.toISOString() ?? null,
+      };
     }),
   getExpense: protectedProcedure.input(z.object({ id: z.uuid() })).query(async ({ ctx, input }) => {
     const [record] = await ctx.database
@@ -361,8 +376,151 @@ export const operationsRouter = createTRPCRouter({
       throw new TRPCError({ code: "NOT_FOUND", message: "Expense not found." });
     }
 
-    return record;
+    return {
+      ...record,
+      createdAt: record.createdAt.toISOString(),
+      transactionAt: effectiveTransactionAt(
+        record.transactionDate,
+        record.transactionAt,
+        record.createdAt,
+      ).toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+      voidedAt: record.voidedAt?.toISOString() ?? null,
+    };
   }),
+  allTransactions: protectedProcedure
+    .input(
+      z
+        .object({
+          currency: z.enum(["THB", "MMK"]).optional(),
+          fromDate: dateSchema,
+          order: z.enum(["newest", "oldest"]).default("newest"),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(1).max(100).default(50),
+          toDate: dateSchema,
+          type: z.enum(["exchange", "cash-bank", "expense"]).optional(),
+        })
+        .refine((input) => input.fromDate <= input.toDate, {
+          message: "The start date must be before or equal to the end date.",
+          path: ["fromDate"],
+        }),
+    )
+    .query(async ({ ctx, input }) => {
+      const includeExchange = !input.type || input.type === "exchange";
+      const includeCashBank = !input.type || input.type === "cash-bank";
+      const includeExpense = !input.type || input.type === "expense";
+
+      const [exchangeRecords, cashBankRecords, expenseRecords] = await Promise.all([
+        includeExchange
+          ? ctx.database
+              .select()
+              .from(exchangeTransaction)
+              .where(
+                and(
+                  gte(exchangeTransaction.transactionDate, input.fromDate),
+                  lte(exchangeTransaction.transactionDate, input.toDate),
+                  input.currency
+                    ? eq(
+                        exchangeTransaction.direction,
+                        input.currency === "THB" ? "thb-to-mmk" : "mmk-to-thb",
+                      )
+                    : undefined,
+                  isNull(exchangeTransaction.voidedAt),
+                ),
+              )
+          : Promise.resolve([]),
+        includeCashBank
+          ? ctx.database
+              .select()
+              .from(cashBankTransaction)
+              .where(
+                and(
+                  gte(cashBankTransaction.transactionDate, input.fromDate),
+                  lte(cashBankTransaction.transactionDate, input.toDate),
+                  input.currency ? eq(cashBankTransaction.currency, input.currency) : undefined,
+                  isNull(cashBankTransaction.voidedAt),
+                ),
+              )
+          : Promise.resolve([]),
+        includeExpense
+          ? ctx.database
+              .select()
+              .from(expense)
+              .where(
+                and(
+                  gte(expense.transactionDate, input.fromDate),
+                  lte(expense.transactionDate, input.toDate),
+                  input.currency ? eq(expense.currency, input.currency) : undefined,
+                  isNull(expense.voidedAt),
+                ),
+              )
+          : Promise.resolve([]),
+      ]);
+
+      const items = [
+        ...exchangeRecords.map((record) => ({
+          amount: record.sourceAmount,
+          currency: record.direction === "thb-to-mmk" ? ("THB" as const) : ("MMK" as const),
+          description: record.description,
+          direction: record.direction,
+          id: record.id,
+          profitAmount: record.formulaProfitThb,
+          profitCurrency: "THB" as const,
+          transactionAt: record.transactionAt.toISOString(),
+          transactionDate: record.transactionDate,
+          type: "exchange" as const,
+        })),
+        ...cashBankRecords.map((record) => ({
+          amount: record.principalAmount,
+          currency: record.currency,
+          description: record.description,
+          direction: record.direction,
+          id: record.id,
+          profitAmount: record.feeAmount,
+          profitCurrency: record.currency,
+          transactionAt: effectiveTransactionAt(
+            record.transactionDate,
+            record.transactionAt,
+            record.createdAt,
+          ).toISOString(),
+          transactionDate: record.transactionDate,
+          type: "cash-bank" as const,
+        })),
+        ...expenseRecords.map((record) => ({
+          amount: record.amount,
+          currency: record.currency,
+          description: record.description,
+          direction: null,
+          id: record.id,
+          profitAmount: null,
+          profitCurrency: null,
+          transactionAt: effectiveTransactionAt(
+            record.transactionDate,
+            record.transactionAt,
+            record.createdAt,
+          ).toISOString(),
+          transactionDate: record.transactionDate,
+          type: "expense" as const,
+        })),
+      ].sort((first, second) => {
+        const difference = Date.parse(first.transactionAt) - Date.parse(second.transactionAt);
+        if (difference !== 0) return input.order === "newest" ? -difference : difference;
+        return `${first.type}-${first.id}`.localeCompare(`${second.type}-${second.id}`);
+      });
+
+      const total = items.length;
+      const totalPages = Math.max(1, Math.ceil(total / input.pageSize));
+      const page = Math.min(input.page, totalPages);
+      const start = (page - 1) * input.pageSize;
+
+      return {
+        items: items.slice(start, start + input.pageSize),
+        page,
+        pageSize: input.pageSize,
+        total,
+        totalPages,
+      };
+    }),
   list: protectedProcedure
     .input(
       z.object({
@@ -383,7 +541,15 @@ export const operationsRouter = createTRPCRouter({
           )
           .orderBy(desc(exchangeTransaction.createdAt))
           .limit(100);
-        return records.map((record) => ({ ...record, type: "exchange" as const }));
+        return records
+          .map((record) => ({
+            ...record,
+            transactionAt: record.transactionAt.toISOString(),
+            type: "exchange" as const,
+          }))
+          .sort(
+            (first, second) => Date.parse(second.transactionAt) - Date.parse(first.transactionAt),
+          );
       }
 
       if (input.type === "cash-bank") {
@@ -398,7 +564,19 @@ export const operationsRouter = createTRPCRouter({
           )
           .orderBy(desc(cashBankTransaction.createdAt))
           .limit(100);
-        return records.map((record) => ({ ...record, type: "cash-bank" as const }));
+        return records
+          .map((record) => ({
+            ...record,
+            transactionAt: effectiveTransactionAt(
+              record.transactionDate,
+              record.transactionAt,
+              record.createdAt,
+            ).toISOString(),
+            type: "cash-bank" as const,
+          }))
+          .sort(
+            (first, second) => Date.parse(second.transactionAt) - Date.parse(first.transactionAt),
+          );
       }
 
       const records = await ctx.database
@@ -407,7 +585,19 @@ export const operationsRouter = createTRPCRouter({
         .where(and(eq(expense.transactionDate, input.date), isNull(expense.voidedAt)))
         .orderBy(desc(expense.createdAt))
         .limit(100);
-      return records.map((record) => ({ ...record, type: "expense" as const }));
+      return records
+        .map((record) => ({
+          ...record,
+          transactionAt: effectiveTransactionAt(
+            record.transactionDate,
+            record.transactionAt,
+            record.createdAt,
+          ).toISOString(),
+          type: "expense" as const,
+        }))
+        .sort(
+          (first, second) => Date.parse(second.transactionAt) - Date.parse(first.transactionAt),
+        );
     }),
   revisionHistory: protectedProcedure
     .input(
@@ -570,11 +760,12 @@ export const operationsRouter = createTRPCRouter({
         id: z.uuid(),
         principalAmount: positiveMoneySchema,
         reason: z.string().trim().min(3).max(500),
-        transactionDate: dateSchema,
+        transactionAt: dateTimeSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const calculation = calculateCashBank(input);
+      const transactionAt = new Date(input.transactionAt);
 
       return ctx.database.transaction(async (transaction) => {
         const [before] = await transaction
@@ -603,7 +794,8 @@ export const operationsRouter = createTRPCRouter({
             feeAmount: calculation.feeAmount,
             feeRate: input.feeRate,
             principalAmount: input.principalAmount,
-            transactionDate: input.transactionDate,
+            transactionAt,
+            transactionDate: dateInYangon(transactionAt),
             updatedBy: ctx.session.user.id,
           })
           .where(eq(cashBankTransaction.id, input.id))
@@ -634,10 +826,11 @@ export const operationsRouter = createTRPCRouter({
         description: z.string().trim().min(1).max(500),
         id: z.uuid(),
         reason: z.string().trim().min(3).max(500),
-        transactionDate: dateSchema,
+        transactionAt: dateTimeSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const transactionAt = new Date(input.transactionAt);
       return ctx.database.transaction(async (transaction) => {
         const [before] = await transaction
           .select()
@@ -655,7 +848,8 @@ export const operationsRouter = createTRPCRouter({
             amount: input.amount,
             currency: input.currency,
             description: input.description,
-            transactionDate: input.transactionDate,
+            transactionAt,
+            transactionDate: dateInYangon(transactionAt),
             updatedBy: ctx.session.user.id,
           })
           .where(eq(expense.id, input.id))

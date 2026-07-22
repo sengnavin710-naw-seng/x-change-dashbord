@@ -55,6 +55,10 @@ export function addMoney(...values: string[]) {
   );
 }
 
+export function normalizeMoneyInput(value: string) {
+  return value.replace(/[,\s]/g, "");
+}
+
 export interface CalculateExchangeInput {
   actualPayout?: string;
   baseRate: string;

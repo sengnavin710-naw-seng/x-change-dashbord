@@ -5,6 +5,7 @@ export {
   calculateExchange,
   calculateExchangeRateConfiguration,
   calculateExchangeRateQuote,
+  normalizeMoneyInput,
   type CalculateCashBankInput,
   type CalculateExchangeInput,
   type CalculateExchangeRateConfigurationInput,

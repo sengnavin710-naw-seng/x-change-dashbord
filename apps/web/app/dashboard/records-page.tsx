@@ -2,7 +2,10 @@ import Link from "next/link";
 import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
-import { Button } from "@repo/ui/button";
+
+import { formatYangonDateTime, getYangonDateTime } from "@/lib/exchange-rate";
+
+import { NewEntryDialog } from "./new-entry-dialog";
 
 type RecordType = "cash-bank" | "exchange" | "expense";
 
@@ -25,40 +28,25 @@ function formatMoney(value: string, currency: "MMK" | "THB") {
 }
 
 interface RecordsPageProps {
-  description: string;
-  english: string;
-  myanmar: string;
   type: RecordType;
 }
 
-export async function RecordsPage({
-  description,
-  english,
-  myanmar,
-  type,
-}: Readonly<RecordsPageProps>) {
+export async function RecordsPage({ type }: Readonly<RecordsPageProps>) {
   const caller = appRouter.createCaller(await createTRPCContext({ headers: await headers() }));
-  const date = todayInYangon();
+  const current = getYangonDateTime();
+  const date = current.date || todayInYangon();
   const records = await caller.operations.list({ date, type });
+  const pageTitle =
+    type === "exchange" ? "Exchange" : type === "cash-bank" ? "Cash ↔ Bank" : "Expenses";
 
   return (
     <div className="space-y-7">
       <header className="flex flex-col gap-5 border-b border-[var(--hairline)] pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.12em] text-[var(--primary)] uppercase">
-            {english}
-          </p>
-          <h1 className="mt-3 font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-            {myanmar}
-          </h1>
-          <p className="mt-2 max-w-[680px] text-sm leading-6 text-[var(--ink-muted)]">
-            {description}
-          </p>
-          <p className="mt-3 text-xs font-semibold text-[var(--ink-secondary)]">{date} · Today</p>
+          <h1 className="sr-only">{pageTitle}</h1>
+          <p className="text-sm font-semibold text-[var(--ink-secondary)]">{date} · Today</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/new">စာရင်းအသစ် / New entry</Link>
-        </Button>
+        <NewEntryDialog defaultDate={date} defaultTime={current.time} type={type} />
       </header>
 
       <section className="border border-[var(--hairline)] bg-white">
@@ -68,7 +56,7 @@ export async function RecordsPage({
         </div>
         {records.length === 0 ? (
           <div className="px-5 py-14 text-center sm:px-6">
-            <p className="font-semibold text-[var(--ink)]">ယနေ့ စာရင်းမရှိသေးပါ</p>
+            <p className="font-semibold text-[var(--ink)]">No records for today</p>
             <p className="mt-2 text-xs text-[var(--ink-muted)]">No records for today.</p>
           </div>
         ) : (
@@ -80,18 +68,22 @@ export async function RecordsPage({
               >
                 <div>
                   <p className="text-sm font-semibold text-[var(--ink)]">
-                    {record.description || "မှတ်ချက်မရှိ / No description"}
+                    {record.description ||
+                      (record.type === "expense" ? "No particular" : "No description")}
                   </p>
                   <p className="mt-1 text-[10px] text-[var(--ink-muted)] uppercase">
                     {record.type === "exchange"
                       ? record.direction === "thb-to-mmk"
-                        ? "THB → MMK"
-                        : "MMK → THB"
+                        ? "THB to MMK"
+                        : "MMK to THB"
                       : record.type === "cash-bank"
                         ? record.direction === "bank-to-cash"
                           ? "Bank In → Cash Out"
                           : "Cash In → Bank Out"
                         : `${record.currency} expense`}
+                  </p>
+                  <p className="mt-1 text-xs tabular-nums text-[var(--ink-muted)]">
+                    {formatYangonDateTime(record.transactionAt)}
                   </p>
                   <Link
                     className="mt-2 inline-block text-[11px] font-semibold text-[var(--primary-dark)] underline underline-offset-4"
@@ -103,7 +95,7 @@ export async function RecordsPage({
                           : `/dashboard/expenses/${record.id}/edit`
                     }
                   >
-                    နောက်ကြောင်းပြန်ပြင်ရန် / Edit retrospectively
+                    Edit Record
                   </Link>
                 </div>
                 <div className="text-left sm:text-right">
@@ -116,7 +108,7 @@ export async function RecordsPage({
                         )}
                       </p>
                       <p className="mt-1 text-[10px] text-[var(--ink-muted)]">
-                        Formula profit {formatMoney(record.formulaProfitThb, "THB")} THB
+                        Profit {formatMoney(record.formulaProfitThb, "THB")} THB
                       </p>
                     </>
                   ) : record.type === "cash-bank" ? (
@@ -140,7 +132,7 @@ export async function RecordsPage({
         )}
       </section>
       <p className="text-xs leading-5 text-[var(--ink-muted)]">
-        ယနေ့စာရင်း 100 ခုအထိ ပြသထားသည်။ / Showing up to 100 records for today.
+        Showing up to 100 records for today.
       </p>
     </div>
   );

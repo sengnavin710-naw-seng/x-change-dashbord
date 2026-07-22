@@ -134,16 +134,16 @@ export const exchangeRateVersion = pgTable(
   ],
 );
 
-export const openingBalance = pgTable(
+export const balanceConfiguration = pgTable(
   "opening_balance",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    effectiveDate: date("effective_date", { mode: "string" }).notNull(),
-    referenceThb: money("reference_thb").notNull(),
-    referenceMmk: money("reference_mmk").notNull(),
-    operationalThb: money("operational_thb").notNull(),
-    operationalMmk: money("operational_mmk").notNull(),
-    reconciled: boolean("reconciled").default(false).notNull(),
+    calculationStartDate: date("effective_date", { mode: "string" }).notNull(),
+    openingThb: money("reference_thb").notNull(),
+    openingMmk: money("reference_mmk").notNull(),
+    checkpointThb: money("operational_thb").notNull(),
+    checkpointMmk: money("operational_mmk").notNull(),
+    legacyReconciled: boolean("reconciled").default(false).notNull(),
     note: text("note"),
     createdBy: text("created_by")
       .notNull()
@@ -157,7 +157,7 @@ export const openingBalance = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [uniqueIndex("opening_balance_effective_date_unique").on(table.effectiveDate)],
+  (table) => [uniqueIndex("opening_balance_effective_date_unique").on(table.calculationStartDate)],
 );
 
 export const exchangeTransaction = pgTable(
@@ -210,6 +210,7 @@ export const cashBankTransaction = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     transactionDate: date("transaction_date", { mode: "string" }).notNull(),
+    transactionAt: timestamp("transaction_at", { mode: "date", withTimezone: true }),
     currency: currency("currency").notNull(),
     direction: cashBankDirection("direction").notNull(),
     description: text("description"),
@@ -236,6 +237,7 @@ export const cashBankTransaction = pgTable(
   },
   (table) => [
     index("cash_bank_transaction_date_idx").on(table.transactionDate),
+    index("cash_bank_transaction_at_idx").on(table.transactionAt),
     index("cash_bank_transaction_active_date_idx").on(table.voidedAt, table.transactionDate),
   ],
 );
@@ -245,6 +247,7 @@ export const expense = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     transactionDate: date("transaction_date", { mode: "string" }).notNull(),
+    transactionAt: timestamp("transaction_at", { mode: "date", withTimezone: true }),
     currency: currency("currency").notNull(),
     amount: money("amount").notNull(),
     description: text("description").notNull(),
@@ -262,7 +265,10 @@ export const expense = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("expense_date_idx").on(table.transactionDate)],
+  (table) => [
+    index("expense_date_idx").on(table.transactionDate),
+    index("expense_transaction_at_idx").on(table.transactionAt),
+  ],
 );
 
 export const recordRevision = pgTable(
@@ -284,10 +290,10 @@ export const recordRevision = pgTable(
 );
 
 export const operationsSchema = {
+  balanceConfiguration,
   cashBankTransaction,
   exchangeRateVersion,
   exchangeTransaction,
   expense,
-  openingBalance,
   recordRevision,
 };

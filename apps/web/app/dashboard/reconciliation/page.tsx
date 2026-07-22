@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
 
-import { OpeningBalanceForm } from "./opening-form";
+import { BalanceConfigurationForm } from "./opening-form";
 
-export const metadata: Metadata = { title: "စာရင်းညှိနှိုင်း · Reconciliation" };
+export const metadata: Metadata = { title: "Opening / Closing Balance" };
 
 function todayInYangon() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -18,73 +18,142 @@ function todayInYangon() {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
-function format(value: string) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(Number(value));
+function previousCalendarDate(date: string) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10);
 }
 
-export default async function ReconciliationPage() {
+function formatMoney(value: string, currency: "MMK" | "THB") {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: currency === "THB" ? 2 : 0,
+    minimumFractionDigits: currency === "THB" ? 2 : 0,
+  }).format(Number(value));
+}
+
+export default async function BalancePage() {
   const caller = appRouter.createCaller(await createTRPCContext({ headers: await headers() }));
   const today = todayInYangon();
   const dashboard = await caller.dashboard.today({ date: today });
+  const configuration = dashboard.balanceConfiguration;
 
   return (
     <div className="space-y-7">
       <header className="border-b border-[var(--hairline)] pb-7">
-        <p className="text-xs font-semibold tracking-[0.12em] text-[var(--primary)] uppercase">
-          Reconciliation
-        </p>
-        <h1 className="mt-3 font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          စာရင်းညှိနှိုင်း
+        <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
+          Opening / Closing Balance
         </h1>
-        <p className="mt-2 max-w-[720px] text-sm leading-6 text-[var(--ink-muted)]">
-          Reference Opening နှင့် Operational Opening ကို Statement အတည်ပြုချက်မရမချင်း
-          သီးခြားထားသည်။
-        </p>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">{today} · Today</p>
       </header>
 
-      {dashboard.openingBalance ? (
-        <section className="border border-[#e4c45f] bg-[#fff8df]">
-          <div className="border-b border-[#e4c45f] px-5 py-4 sm:px-6">
-            <p className="text-xs font-semibold text-[#755700] uppercase">
-              မညှိရသေး / Unreconciled
-            </p>
-            <p className="mt-2 text-sm text-[var(--ink-secondary)]">
-              External evidence is still required before either set is marked as confirmed.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Reference THB", dashboard.openingBalance.referenceThb],
-              ["Reference MMK", dashboard.openingBalance.referenceMmk],
-              ["Operational THB", dashboard.openingBalance.operationalThb],
-              ["Operational MMK", dashboard.openingBalance.operationalMmk],
-            ].map(([label, value], index) => (
-              <div
-                className={`p-5 ${index > 0 ? "border-t border-[#e4c45f] sm:border-t-0 sm:border-l" : ""}`}
-                key={label}
-              >
-                <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                  {label}
-                </p>
-                <p className="mt-3 text-xl font-semibold tabular-nums text-[var(--ink)]">
-                  {format(value!)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <OpeningBalanceForm defaultDate={today} />
-      )}
+      {configuration && dashboard.closingBalance ? (
+        <>
+          <section className="border border-[var(--hairline)] bg-white">
+            <div className="flex items-center justify-between gap-5 border-b border-[var(--hairline)] px-5 py-4 sm:px-6">
+              <h2 className="font-semibold text-[var(--ink)]">Current Closing Balance</h2>
+              <span className="text-[10px] font-semibold tracking-[0.08em] text-[var(--ink-muted)] uppercase">
+                {today}
+              </span>
+            </div>
+            <div className="grid sm:grid-cols-2">
+              <BalanceAmount
+                currency="THB"
+                value={formatMoney(dashboard.closingBalance.thb, "THB")}
+              />
+              <BalanceAmount
+                currency="MMK"
+                right
+                value={formatMoney(dashboard.closingBalance.mmk, "MMK")}
+              />
+            </div>
+          </section>
 
-      <aside className="border-l-4 border-[var(--primary)] bg-[var(--surface-2)] px-5 py-5">
-        <p className="font-semibold text-[var(--ink)]">လိုအပ်သော အထောက်အထား / Evidence required</p>
-        <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--ink-secondary)]">
-          <li>• June closing balance</li>
-          <li>• THB and MMK cash count</li>
-          <li>• Bank statements and any pre-July conversion record</li>
-        </ul>
-      </aside>
+          <section className="border border-[var(--hairline)] bg-white">
+            <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-6">
+              <h2 className="font-semibold text-[var(--ink)]">Balance Reference</h2>
+            </div>
+            <div className="hidden grid-cols-[minmax(0,1fr)_150px_180px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.08em] text-[var(--ink-muted)] uppercase sm:grid sm:px-6">
+              <span>Balance</span>
+              <span className="text-right">THB</span>
+              <span className="text-right">MMK</span>
+            </div>
+            <BalanceReferenceRow
+              label="Opening Balance"
+              mmk={formatMoney(configuration.openingMmk, "MMK")}
+              thb={formatMoney(configuration.openingThb, "THB")}
+            />
+            <BalanceReferenceRow
+              date={configuration.checkpointDate}
+              label="Previous Closing Balance"
+              mmk={formatMoney(configuration.checkpointMmk, "MMK")}
+              thb={formatMoney(configuration.checkpointThb, "THB")}
+            />
+          </section>
+
+          <details className="max-w-[720px] border border-[var(--hairline)] bg-[#f4f7fb]">
+            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset sm:px-7">
+              Edit Balance Setup
+            </summary>
+            <div className="border-t border-[var(--hairline)] bg-[var(--canvas)] p-3 sm:p-5">
+              <BalanceConfigurationForm
+                defaultCheckpointDate={configuration.checkpointDate}
+                initial={configuration}
+              />
+            </div>
+          </details>
+        </>
+      ) : (
+        <>
+          <section className="border-l-4 border-[var(--warning)] bg-[#fff8df] px-5 py-4">
+            <p className="font-semibold text-[var(--ink)]">Balance setup is not configured</p>
+          </section>
+          <BalanceConfigurationForm
+            defaultCheckpointDate={previousCalendarDate(today)}
+            initial={null}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function BalanceAmount({
+  currency,
+  right = false,
+  value,
+}: Readonly<{ currency: "MMK" | "THB"; right?: boolean; value: string }>) {
+  return (
+    <div
+      className={`p-6 lg:p-8 ${right ? "border-t border-[var(--hairline)] sm:border-t-0 sm:border-l" : ""}`}
+    >
+      <p className="text-xs font-semibold text-[var(--ink-muted)]">{currency}</p>
+      <p className="mt-4 font-[var(--font-display)] text-[clamp(2rem,5vw,3.5rem)] leading-none font-medium tracking-[-0.04em] tabular-nums text-[var(--ink)]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function BalanceReferenceRow({
+  date,
+  label,
+  mmk,
+  thb,
+}: Readonly<{ date?: string; label: string; mmk: string; thb: string }>) {
+  return (
+    <div className="grid gap-4 border-b border-[var(--hairline)] px-5 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px_180px] sm:items-center sm:px-6">
+      <div>
+        <p className="text-sm font-semibold text-[var(--ink)]">{label}</p>
+        {date ? <p className="mt-1 text-[10px] text-[var(--ink-muted)]">{date}</p> : null}
+      </div>
+      <p className="text-sm font-semibold tabular-nums text-[var(--ink)] sm:text-right">
+        <span className="mr-2 text-[10px] text-[var(--ink-muted)] sm:hidden">THB</span>
+        {thb}
+      </p>
+      <p className="text-sm font-semibold tabular-nums text-[var(--ink)] sm:text-right">
+        <span className="mr-2 text-[10px] text-[var(--ink-muted)] sm:hidden">MMK</span>
+        {mmk}
+      </p>
     </div>
   );
 }

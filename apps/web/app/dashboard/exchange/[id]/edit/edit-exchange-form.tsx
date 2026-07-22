@@ -29,6 +29,7 @@ function value(form: FormData, name: string) {
 
 export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }>) {
   const router = useRouter();
+  const utils = trpc.useUtils();
   const initialDateTime = getYangonDateTime(new Date(record.transactionAt));
   const [transactionDate, setTransactionDate] = useState(initialDateTime.date);
   const [transactionTime, setTransactionTime] = useState(initialDateTime.time);
@@ -87,20 +88,19 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
         spreadOverride: rateMode === "override" ? overrideSpread : undefined,
         transactionAt,
       });
+      await utils.dashboard.today.invalidate();
       router.push("/dashboard/exchange");
       router.refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "စာရင်းကို ပြင်၍မရပါ / Unable to update record",
-      );
+      setError(cause instanceof Error ? cause.message : "Unable to update record");
     }
   }
 
   return (
-    <form className="max-w-[860px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
-      <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-7">
+    <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
+      <div className="grid items-start gap-5 p-5 sm:p-7 [&>label]:block">
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">ရက်စွဲ / Date</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Date</span>
           <Input
             disabled={mutation.isPending}
             onChange={(event) => setTransactionDate(event.target.value)}
@@ -110,7 +110,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">အချိန် / Time</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Time</span>
           <Input
             disabled={mutation.isPending}
             onChange={(event) => setTransactionTime(event.target.value)}
@@ -120,9 +120,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            ဦးတည်ချက် / Direction
-          </span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Direction</span>
           <select
             className={selectClass}
             disabled={mutation.isPending}
@@ -133,13 +131,13 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
             }}
             value={direction}
           >
-            <option value="thb-to-mmk">THB → MMK</option>
-            <option value="mmk-to-thb">MMK → THB</option>
+            <option value="thb-to-mmk">THB to MMK</option>
+            <option value="mmk-to-thb">MMK to THB</option>
           </select>
         </label>
         <label className="space-y-2">
           <span className="block text-sm font-semibold text-[var(--ink)]">
-            လက်ခံငွေ / Source amount
+            {direction === "thb-to-mmk" ? "IN THB" : "IN MMK"}
           </span>
           <Input
             disabled={mutation.isPending}
@@ -151,7 +149,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
         </label>
         <label className="space-y-2">
           <span className="block text-sm font-semibold text-[var(--ink)]">
-            အမှန်တကယ် ပေးငွေ / Actual payout
+            {direction === "thb-to-mmk" ? "Actual MMK" : "Actual THB"}
           </span>
           <Input
             disabled={mutation.isPending}
@@ -163,25 +161,21 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            နှုန်းအသုံးပြုပုံ / Rate handling
-          </span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Rate Handling</span>
           <select
             className={selectClass}
             disabled={mutation.isPending}
             onChange={(event) => setRateMode(event.target.value as RateMode)}
             value={rateMode}
           >
-            <option value="preserve">မူလနှုန်းကို ထိန်းထားရန် / Preserve original</option>
-            <option value="historical">အချိန်အလိုက် ပြန်ရွေးရန် / Reapply historical</option>
-            <option value="override">Spread ပြောင်းရန် / Override spread</option>
+            <option value="preserve">Preserve Original</option>
+            <option value="historical">Reapply Historical</option>
+            <option value="override">Override Spread</option>
           </select>
         </label>
         {rateMode === "override" ? (
-          <label className="space-y-2 sm:col-span-2">
-            <span className="block text-sm font-semibold text-[var(--ink)]">
-              ပြင်ဆင်ထားသော Spread / Override spread
-            </span>
+          <label className="space-y-2">
+            <span className="block text-sm font-semibold text-[var(--ink)]">Override Spread</span>
             <Input
               disabled={mutation.isPending}
               inputMode="decimal"
@@ -191,7 +185,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
             />
           </label>
         ) : null}
-        <div className="border border-[var(--hairline)] bg-[#f4f7fb] p-4 sm:col-span-2">
+        <div className="border border-[var(--hairline)] bg-[#f4f7fb] p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
             <div>
               <p className="text-[10px] font-semibold tracking-[0.1em] text-[var(--primary)] uppercase">
@@ -215,10 +209,11 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           {calculation ? (
             <div className="mt-4 grid gap-3 border-t border-[var(--hairline)] pt-4 text-xs sm:grid-cols-3">
               <p>
-                Calculated <strong>{formatWholePayout(calculation.calculatedPayout)}</strong>
+                {direction === "thb-to-mmk" ? "ER MMK" : "OUT THB"}{" "}
+                <strong>{formatWholePayout(calculation.calculatedPayout)}</strong>
               </p>
               <p>
-                Formula profit <strong>{calculation.formulaProfitThb} THB</strong>
+                Profit <strong>{calculation.formulaProfitThb} THB</strong>
               </p>
               <p>
                 Variance <strong>{calculation.settlementVarianceThb ?? "—"} THB</strong>
@@ -226,20 +221,16 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
             </div>
           ) : null}
         </div>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            မှတ်ချက် / Description
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Description</span>
           <Input
             defaultValue={record.description ?? ""}
             disabled={mutation.isPending}
             name="description"
           />
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            ပြင်ဆင်ရသည့်အကြောင်းရင်း / Edit reason
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Edit Reason</span>
           <Input disabled={mutation.isPending} minLength={3} name="reason" required />
           <span className="block text-[10px] leading-5 text-[var(--ink-muted)]">
             Required and preserved in revision history.
@@ -261,10 +252,10 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           type="button"
           variant="outline"
         >
-          မလုပ်တော့ပါ / Cancel
+          Cancel
         </Button>
         <Button disabled={mutation.isPending || !calculation} type="submit">
-          {mutation.isPending ? "ပြင်နေသည်… / Updating…" : "ပြင်ဆင်ရန် / Update record"}
+          {mutation.isPending ? "Updating…" : "Update Record"}
         </Button>
       </div>
     </form>

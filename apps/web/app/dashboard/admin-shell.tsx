@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { Button } from "@repo/ui/button";
-
 import { DashboardNavigation } from "./navigation";
 import { SignOutButton } from "./sign-out-button";
 
@@ -16,7 +14,7 @@ interface AdminShellProps {
 
 export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
   return (
-    <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink-slate)]" lang="my">
+    <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink-slate)]" lang="en">
       <header className="sticky top-0 z-30 border-b border-[var(--hairline)] bg-[color:var(--canvas)/0.96] px-4 backdrop-blur sm:px-6 lg:hidden">
         <div className="flex h-16 items-center justify-between gap-4">
           <Link className="flex items-center gap-3" href="/dashboard">
@@ -32,7 +30,7 @@ export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
           </Link>
           <details className="relative">
             <summary className="cursor-pointer list-none rounded-[4px] border border-[var(--hairline-soft)] bg-white px-3 py-2 text-xs font-semibold text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">
-              မီနူး / Menu
+              Menu
             </summary>
             <div className="absolute right-0 mt-2 w-[min(88vw,340px)] border border-[var(--hairline)] bg-[var(--canvas)] p-3 shadow-[0_12px_32px_rgba(0,21,60,0.12)]">
               <DashboardNavigation mobile />
@@ -61,9 +59,6 @@ export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
         </Link>
 
         <div className="flex-1 overflow-y-auto px-3 py-6">
-          <p className="mb-3 px-3 text-[10px] font-semibold tracking-[0.12em] text-[var(--ink-muted)] uppercase">
-            Operations
-          </p>
           <DashboardNavigation />
         </div>
 
@@ -77,15 +72,6 @@ export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
       </aside>
 
       <div className="lg:pl-[248px]">
-        <div className="hidden h-[82px] items-center justify-between border-b border-[var(--hairline)] px-8 lg:flex xl:px-10">
-          <div>
-            <p className="text-xs font-semibold text-[var(--ink)]">အတွင်းပိုင်း လုပ်ငန်းစနစ်</p>
-            <p className="mt-1 text-[10px] text-[var(--ink-muted)]">Internal operations system</p>
-          </div>
-          <Button asChild size="sm">
-            <Link href="/dashboard/new">စာရင်းအသစ် / New entry</Link>
-          </Button>
-        </div>
         <main className="mx-auto max-w-[1500px] px-4 py-7 sm:px-6 lg:px-8 lg:py-8 xl:px-10">
           {children}
         </main>

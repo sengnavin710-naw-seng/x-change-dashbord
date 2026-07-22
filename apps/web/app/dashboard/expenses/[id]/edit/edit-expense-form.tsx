@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
 
+import { getYangonDateTime, toYangonIso } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
 
 const selectClass =
@@ -16,6 +17,7 @@ interface ExpenseRecord {
   currency: "MMK" | "THB";
   description: string;
   id: string;
+  transactionAt: string;
   transactionDate: string;
 }
 
@@ -25,8 +27,10 @@ function value(form: FormData, name: string) {
 
 export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>) {
   const router = useRouter();
+  const utils = trpc.useUtils();
   const mutation = trpc.operations.updateExpense.useMutation();
   const [error, setError] = useState<string | null>(null);
+  const initialDateTime = getYangonDateTime(new Date(record.transactionAt));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,20 +43,21 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
         description: value(form, "description"),
         id: record.id,
         reason: value(form, "reason"),
-        transactionDate: value(form, "transactionDate"),
+        transactionAt: toYangonIso(value(form, "transactionDate"), value(form, "transactionTime")),
       });
+      await utils.dashboard.today.invalidate();
       router.push("/dashboard/expenses");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "စာရင်းကို ပြင်၍မရပါ");
+      setError(cause instanceof Error ? cause.message : "Unable to update record");
     }
   }
 
   return (
-    <form className="max-w-[780px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
-      <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-7">
+    <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
+      <div className="grid gap-5 p-5 sm:p-7 [&>label]:block">
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">ရက်စွဲ / Date</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Date</span>
           <Input
             defaultValue={record.transactionDate}
             disabled={mutation.isPending}
@@ -62,7 +67,17 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">ငွေကြေး / Currency</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Time</span>
+          <Input
+            defaultValue={initialDateTime.time}
+            disabled={mutation.isPending}
+            name="transactionTime"
+            required
+            type="time"
+          />
+        </label>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Currency</span>
           <select
             className={selectClass}
             defaultValue={record.currency}
@@ -73,8 +88,8 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
             <option value="MMK">MMK</option>
           </select>
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">ကုန်ကျငွေ / Amount</span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Amount</span>
           <Input
             defaultValue={record.amount}
             disabled={mutation.isPending}
@@ -83,10 +98,8 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
             required
           />
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            မှတ်ချက် / Description
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Particular</span>
           <Input
             defaultValue={record.description}
             disabled={mutation.isPending}
@@ -94,10 +107,8 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
             required
           />
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            ပြင်ဆင်ရသည့်အကြောင်းရင်း / Edit reason
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Edit Reason</span>
           <Input disabled={mutation.isPending} minLength={3} name="reason" required />
         </label>
       </div>
@@ -116,10 +127,10 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
           type="button"
           variant="outline"
         >
-          မလုပ်တော့ပါ / Cancel
+          Cancel
         </Button>
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? "ပြင်နေသည်… / Updating…" : "ပြင်ဆင်ရန် / Update record"}
+          {mutation.isPending ? "Updating…" : "Update Record"}
         </Button>
       </div>
     </form>

@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
 
+import { getYangonDateTime, toYangonIso } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
 
 const selectClass =
@@ -18,6 +19,7 @@ interface CashBankRecord {
   feeRate: string;
   id: string;
   principalAmount: string;
+  transactionAt: string;
   transactionDate: string;
 }
 
@@ -27,8 +29,10 @@ function value(form: FormData, name: string) {
 
 export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }>) {
   const router = useRouter();
+  const utils = trpc.useUtils();
   const mutation = trpc.operations.updateCashBank.useMutation();
   const [error, setError] = useState<string | null>(null);
+  const initialDateTime = getYangonDateTime(new Date(record.transactionAt));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,20 +47,21 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
         id: record.id,
         principalAmount: value(form, "principalAmount"),
         reason: value(form, "reason"),
-        transactionDate: value(form, "transactionDate"),
+        transactionAt: toYangonIso(value(form, "transactionDate"), value(form, "transactionTime")),
       });
+      await utils.dashboard.today.invalidate();
       router.push("/dashboard/cash-bank");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "စာရင်းကို ပြင်၍မရပါ");
+      setError(cause instanceof Error ? cause.message : "Unable to update record");
     }
   }
 
   return (
-    <form className="max-w-[780px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
-      <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-7">
+    <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
+      <div className="grid items-start gap-5 p-5 sm:p-7 [&>label]:block">
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">ရက်စွဲ / Date</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Date</span>
           <Input
             defaultValue={record.transactionDate}
             disabled={mutation.isPending}
@@ -66,7 +71,17 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">ငွေကြေး / Currency</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Time</span>
+          <Input
+            defaultValue={initialDateTime.time}
+            disabled={mutation.isPending}
+            name="transactionTime"
+            required
+            type="time"
+          />
+        </label>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Currency</span>
           <select
             className={selectClass}
             defaultValue={record.currency}
@@ -78,9 +93,7 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
           </select>
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            လမ်းကြောင်း / Direction
-          </span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Direction</span>
           <select
             className={selectClass}
             defaultValue={record.direction}
@@ -92,9 +105,7 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
           </select>
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            ဝန်ဆောင်ခ / Fee rate
-          </span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">Fee Rate</span>
           <select
             className={selectClass}
             defaultValue={record.feeRate}
@@ -106,10 +117,8 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
             <option value="0.03">3%</option>
           </select>
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            မူရင်းငွေ / Principal amount
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Amount</span>
           <Input
             defaultValue={record.principalAmount}
             disabled={mutation.isPending}
@@ -118,20 +127,16 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
             required
           />
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            မှတ်ချက် / Description
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Description</span>
           <Input
             defaultValue={record.description ?? ""}
             disabled={mutation.isPending}
             name="description"
           />
         </label>
-        <label className="space-y-2 sm:col-span-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            ပြင်ဆင်ရသည့်အကြောင်းရင်း / Edit reason
-          </span>
+        <label className="space-y-2">
+          <span className="block text-sm font-semibold text-[var(--ink)]">Edit Reason</span>
           <Input disabled={mutation.isPending} minLength={3} name="reason" required />
         </label>
       </div>
@@ -150,10 +155,10 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
           type="button"
           variant="outline"
         >
-          မလုပ်တော့ပါ / Cancel
+          Cancel
         </Button>
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? "ပြင်နေသည်… / Updating…" : "ပြင်ဆင်ရန် / Update record"}
+          {mutation.isPending ? "Updating…" : "Update Record"}
         </Button>
       </div>
     </form>

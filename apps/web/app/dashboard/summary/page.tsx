@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
 
-export const metadata: Metadata = { title: "စာရင်းချုပ် · Summary" };
+export const metadata: Metadata = { title: "Summary" };
 
 function todayInYangon() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -28,11 +28,11 @@ export default async function SummaryPage() {
   const date = todayInYangon();
   const dashboard = await caller.dashboard.today({ date });
   const rows = [
-    ["ဖော်မြူလာအရ FX အမြတ်", "FX formula profit", "THB", dashboard.totals.exchangeFormulaProfitThb],
-    ["ဘတ် ဝန်ဆောင်ခဝင်ငွေ", "THB service fees", "THB", dashboard.totals.cashBankFeeThb],
-    ["ကျပ် ဝန်ဆောင်ခဝင်ငွေ", "MMK service fees", "MMK", dashboard.totals.cashBankFeeMmk],
-    ["ဘတ် ကုန်ကျစရိတ်", "THB expenses", "THB", dashboard.totals.expensesThb],
-    ["ကျပ် ကုန်ကျစရိတ်", "MMK expenses", "MMK", dashboard.totals.expensesMmk],
+    ["Profit (THB)", "THB", dashboard.totals.exchangeFormulaProfitThb],
+    ["Cash / Bank Profit (THB)", "THB", dashboard.totals.cashBankFeeThb],
+    ["Cash / Bank Profit (MMK)", "MMK", dashboard.totals.cashBankFeeMmk],
+    ["Expenses (THB)", "THB", dashboard.totals.expensesThb],
+    ["Expenses (MMK)", "MMK", dashboard.totals.expensesMmk],
   ] as const;
 
   return (
@@ -42,7 +42,7 @@ export default async function SummaryPage() {
           Daily summary
         </p>
         <h1 className="mt-3 font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          ယနေ့ စာရင်းချုပ်
+          Summary
         </h1>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
           {date} · Profit and expenses remain separate
@@ -55,15 +55,12 @@ export default async function SummaryPage() {
           <span className="text-right">Amount</span>
         </div>
         <div className="divide-y divide-[var(--hairline)]">
-          {rows.map(([myanmar, english, currency, value]) => (
+          {rows.map(([label, currency, value]) => (
             <div
               className="grid grid-cols-[minmax(0,1fr)_110px_150px] items-center px-5 py-4 sm:px-6"
-              key={english}
+              key={label}
             >
-              <div>
-                <p className="text-sm font-semibold text-[var(--ink)]">{myanmar}</p>
-                <p className="mt-1 text-[10px] text-[var(--ink-muted)] uppercase">{english}</p>
-              </div>
+              <p className="text-sm font-semibold text-[var(--ink)]">{label}</p>
               <span className="text-xs font-semibold text-[var(--ink-muted)]">{currency}</span>
               <span className="text-right font-semibold tabular-nums text-[var(--ink)]">
                 {format(value, currency)}
@@ -73,8 +70,7 @@ export default async function SummaryPage() {
         </div>
       </section>
       <p className="border-l-4 border-[var(--warning)] bg-[#fff8df] px-4 py-3 text-xs leading-5 text-[var(--ink-secondary)]">
-        H, I နှင့် အဝါရောင် Summary ကော်လံများကို အဓိပ္ပာယ်မသေချာသေးသောကြောင့် ဤစာရင်းချုပ်တွင်
-        မထည့်ထားပါ။ / Unresolved legacy columns H, I, and the yellow band are excluded.
+        Unresolved legacy columns H, I, and the yellow band are excluded.
       </p>
     </div>
   );

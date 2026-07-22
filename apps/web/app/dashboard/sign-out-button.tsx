@@ -20,7 +20,7 @@ export function SignOutButton() {
 
   return (
     <Button className="w-full" disabled={isPending} onClick={signOut} size="sm" variant="outline">
-      {isPending ? "ထွက်နေသည်… / Signing out…" : "ထွက်ရန် / Sign out"}
+      {isPending ? "Signing out…" : "Sign out"}
     </Button>
   );
 }
