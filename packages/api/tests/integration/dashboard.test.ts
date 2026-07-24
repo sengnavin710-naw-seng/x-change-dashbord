@@ -160,7 +160,55 @@ describe("today dashboard", () => {
       { id: exchange.id, type: "exchange" },
       { id: expenseRecord.id, type: "expense" },
     ]);
+    expect(result.items.find((item) => item.type === "exchange")).toMatchObject({
+      inAmount: "100.0000",
+      inChannel: null,
+      inCurrency: "THB",
+      outAmount: "12900.0000",
+      outChannel: null,
+      outCurrency: "MMK",
+    });
+    expect(result.items.find((item) => item.type === "cash-bank")).toMatchObject({
+      inAmount: "101000.0000",
+      inChannel: "Cash",
+      inCurrency: "MMK",
+      outAmount: "100000.0000",
+      outChannel: "Bank",
+      outCurrency: "MMK",
+    });
+    expect(result.items.find((item) => item.type === "expense")).toMatchObject({
+      inAmount: null,
+      inChannel: null,
+      inCurrency: null,
+      outAmount: "500.0000",
+      outChannel: null,
+      outCurrency: "THB",
+    });
     expect(result).toMatchObject({ page: 1, pageSize: 20, total: 3, totalPages: 1 });
+  });
+
+  test("returns the latest transactions across all dates regardless of the selected summary date", async () => {
+    const caller = appRouter.createCaller(activeContext());
+    const older = await caller.operations.createExpense({
+      amount: "500",
+      currency: "THB",
+      description: "Older expense",
+      transactionAt: "2026-07-02T09:00:00+06:30",
+    });
+    const newer = await caller.operations.createCashBank({
+      currency: "MMK",
+      direction: "cash-to-bank",
+      feeRate: "0.01",
+      principalAmount: "100000",
+      transactionAt: "2026-07-05T10:00:00+06:30",
+    });
+
+    const dashboard = await caller.dashboard.today({ date: "2026-07-02" });
+
+    expect(dashboard.latestTransactions.map(({ id, type }) => ({ id, type }))).toEqual([
+      { id: newer.id, type: "cash-bank" },
+      { id: older.id, type: "expense" },
+    ]);
   });
 
   test("filters the transaction timeline and paginates the result", async () => {
@@ -248,13 +296,13 @@ describe("today dashboard", () => {
       balanceConfiguration: null,
       closingBalance: null,
       date: "2026-07-22",
-      profitThisMonth: {
+      profitForRange: {
         fromDate: "2026-07-01",
         mmk: "0.0000",
         thb: "0.0000",
         toDate: "2026-07-22",
       },
-      recentTransactions: [],
+      latestTransactions: [],
       totals: {
         cashBankFeeMmk: "0.0000",
         cashBankFeeThb: "0.0000",
@@ -367,7 +415,7 @@ describe("today dashboard", () => {
       thb: "128400.0000",
     });
     expect(dashboard.totals.exchangeFormulaProfitThb).toBe("5.7143");
-    expect(dashboard.recentTransactions).toHaveLength(1);
+    expect(dashboard.latestTransactions).toHaveLength(1);
   });
 
   test("reports Cash to Bank fees without changing the exchange float balance", async () => {
@@ -395,7 +443,7 @@ describe("today dashboard", () => {
       mmk: "17407355.0000",
       thb: "128200.0000",
     });
-    expect(dashboard.recentTransactions[0]).toMatchObject({
+    expect(dashboard.latestTransactions[0]).toMatchObject({
       currency: "MMK",
       feeAmount: "1200.0000",
       type: "cash-bank",
@@ -434,7 +482,7 @@ describe("today dashboard", () => {
       exchangeFormulaProfitThb: "0.0000",
       expensesMmk: "150000.0000",
     });
-    expect(dashboard.recentTransactions[0]).toMatchObject({
+    expect(dashboard.latestTransactions[0]).toMatchObject({
       amount: "150000.0000",
       currency: "MMK",
       type: "expense",
@@ -454,7 +502,7 @@ describe("today dashboard", () => {
     expect(corrected.totals.expensesMmk).toBe("160000.0000");
   });
 
-  test("recalculates this month's profit after a retrospective edit without subtracting expenses", async () => {
+  test("recalculates profit for the selected date range after a retrospective edit without subtracting expenses", async () => {
     const caller = appRouter.createCaller(activeContext());
     const rate = await caller.exchangeRates.create({
       baseRate: "0.00748",
@@ -505,7 +553,7 @@ describe("today dashboard", () => {
     });
 
     const initial = await caller.dashboard.today({ date: "2026-07-23" });
-    expect(initial.profitThisMonth).toEqual({
+    expect(initial.profitForRange).toEqual({
       fromDate: "2026-07-01",
       mmk: "1000.0000",
       thb: "25.7143",
@@ -523,11 +571,23 @@ describe("today dashboard", () => {
     });
 
     const corrected = await caller.dashboard.today({ date: "2026-07-23" });
-    expect(corrected.profitThisMonth).toEqual({
+    expect(corrected.profitForRange).toEqual({
       fromDate: "2026-07-01",
       mmk: "1500.0000",
       thb: "25.7143",
       toDate: "2026-07-23",
+    });
+
+    const filtered = await caller.dashboard.today({
+      date: "2026-07-23",
+      profitFromDate: "2026-07-05",
+      profitToDate: "2026-07-10",
+    });
+    expect(filtered.profitForRange).toEqual({
+      fromDate: "2026-07-05",
+      mmk: "1500.0000",
+      thb: "20.0000",
+      toDate: "2026-07-10",
     });
   });
 

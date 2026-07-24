@@ -231,7 +231,7 @@ export function EntryForm({
         {!embedded ? (
           <div className="border-b border-[var(--hairline)] px-5 py-5 sm:px-7">
             <p className="text-xs font-semibold tracking-[0.08em] text-[var(--primary)] uppercase">
-              New Entry
+              Add Transaction
             </p>
             <h2 className="mt-2 font-[var(--font-display)] text-2xl font-medium text-[var(--ink)]">
               {entryType === "exchange"

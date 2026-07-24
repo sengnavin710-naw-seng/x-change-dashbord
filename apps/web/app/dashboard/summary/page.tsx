@@ -3,7 +3,9 @@ import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
 
-export const metadata: Metadata = { title: "Summary" };
+import { SingleDateFilter } from "../single-date-filter";
+
+export const metadata: Metadata = { title: "Summary Details" };
 
 function todayInYangon() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -16,6 +18,18 @@ function todayInYangon() {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
+function selectedDate(value: string | string[] | undefined, today: string) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (!candidate || !/^\d{4}-\d{2}-\d{2}$/.test(candidate) || candidate > today) {
+    return today;
+  }
+
+  const parsed = new Date(`${candidate}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== candidate
+    ? today
+    : candidate;
+}
+
 function format(value: string, currency: "MMK" | "THB") {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: currency === "THB" ? 2 : 0,
@@ -23,30 +37,33 @@ function format(value: string, currency: "MMK" | "THB") {
   }).format(Number(value));
 }
 
-export default async function SummaryPage() {
+export default async function SummaryPage({
+  searchParams,
+}: Readonly<{ searchParams: Promise<{ date?: string | string[] }> }>) {
   const caller = appRouter.createCaller(await createTRPCContext({ headers: await headers() }));
-  const date = todayInYangon();
+  const today = todayInYangon();
+  const date = selectedDate((await searchParams).date, today);
   const dashboard = await caller.dashboard.today({ date });
   const rows = [
-    ["Profit (THB)", "THB", dashboard.totals.exchangeFormulaProfitThb],
-    ["Cash / Bank Profit (THB)", "THB", dashboard.totals.cashBankFeeThb],
-    ["Cash / Bank Profit (MMK)", "MMK", dashboard.totals.cashBankFeeMmk],
-    ["Expenses (THB)", "THB", dashboard.totals.expensesThb],
-    ["Expenses (MMK)", "MMK", dashboard.totals.expensesMmk],
+    ["Exchange Profit", "THB", dashboard.totals.exchangeFormulaProfitThb],
+    ["Cash / Bank Profit", "THB", dashboard.totals.cashBankFeeThb],
+    ["Cash / Bank Profit", "MMK", dashboard.totals.cashBankFeeMmk],
+    ["Expenses", "THB", dashboard.totals.expensesThb],
+    ["Expenses", "MMK", dashboard.totals.expensesMmk],
   ] as const;
 
   return (
     <div className="space-y-7">
-      <header className="border-b border-[var(--hairline)] pb-7">
-        <p className="text-xs font-semibold tracking-[0.12em] text-[var(--primary)] uppercase">
-          Daily summary
-        </p>
-        <h1 className="mt-3 font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          Summary
+      <header className="flex items-center justify-between gap-4">
+        <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
+          Summary Details
         </h1>
-        <p className="mt-2 text-sm text-[var(--ink-muted)]">
-          {date} · Profit and expenses remain separate
-        </p>
+        <SingleDateFilter
+          ariaLabel="Summary date filter"
+          date={date}
+          filterId="summary-page-date-filter"
+          maximumDate={today}
+        />
       </header>
       <section className="border border-[var(--hairline)] bg-white">
         <div className="grid grid-cols-[minmax(0,1fr)_110px_150px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold text-[var(--ink-muted)] uppercase sm:px-6">
@@ -58,7 +75,7 @@ export default async function SummaryPage() {
           {rows.map(([label, currency, value]) => (
             <div
               className="grid grid-cols-[minmax(0,1fr)_110px_150px] items-center px-5 py-4 sm:px-6"
-              key={label}
+              key={`${label}-${currency}`}
             >
               <p className="text-sm font-semibold text-[var(--ink)]">{label}</p>
               <span className="text-xs font-semibold text-[var(--ink-muted)]">{currency}</span>
@@ -69,9 +86,6 @@ export default async function SummaryPage() {
           ))}
         </div>
       </section>
-      <p className="border-l-4 border-[var(--warning)] bg-[#fff8df] px-4 py-3 text-xs leading-5 text-[var(--ink-secondary)]">
-        Unresolved legacy columns H, I, and the yellow band are excluded.
-      </p>
     </div>
   );
 }

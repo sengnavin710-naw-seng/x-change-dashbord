@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
 
+import { BalanceConfigurationDialog } from "./balance-configuration-dialog";
 import { BalanceConfigurationForm } from "./opening-form";
 
 export const metadata: Metadata = { title: "Opening / Closing Balance" };
@@ -39,11 +40,19 @@ export default async function BalancePage() {
 
   return (
     <div className="space-y-7">
-      <header className="border-b border-[var(--hairline)] pb-7">
-        <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          Opening / Closing Balance
-        </h1>
-        <p className="mt-2 text-sm text-[var(--ink-muted)]">{today} · Today</p>
+      <header className="flex flex-col gap-5 border-b border-[var(--hairline)] pb-7 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
+            Opening / Closing Balance
+          </h1>
+          <p className="mt-2 text-sm text-[var(--ink-muted)]">{today} · Today</p>
+        </div>
+        {configuration ? (
+          <BalanceConfigurationDialog
+            defaultCheckpointDate={configuration.checkpointDate}
+            initial={configuration}
+          />
+        ) : null}
       </header>
 
       {configuration && dashboard.closingBalance ? (
@@ -89,18 +98,6 @@ export default async function BalancePage() {
               thb={formatMoney(configuration.checkpointThb, "THB")}
             />
           </section>
-
-          <details className="max-w-[720px] border border-[var(--hairline)] bg-[#f4f7fb]">
-            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset sm:px-7">
-              Edit Balance Setup
-            </summary>
-            <div className="border-t border-[var(--hairline)] bg-[var(--canvas)] p-3 sm:p-5">
-              <BalanceConfigurationForm
-                defaultCheckpointDate={configuration.checkpointDate}
-                initial={configuration}
-              />
-            </div>
-          </details>
         </>
       ) : (
         <>

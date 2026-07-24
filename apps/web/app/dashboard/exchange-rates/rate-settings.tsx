@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { calculateExchangeRateConfiguration } from "@repo/api/operations";
 import { Button } from "@repo/ui/button";
@@ -105,7 +105,9 @@ function configurationFromStoredRate(rate: {
 }
 
 export function RateSettings() {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const initialLocal = useMemo(() => getYangonDateTime(), []);
+  const [isOpen, setIsOpen] = useState(false);
   const [baseRateDraft, setBaseRateDraft] = useState<string | null>(null);
   const [thbToMmkSellingRateDraft, setThbToMmkSellingRateDraft] = useState<string | null>(null);
   const [mmkToThbBuyingRateDraft, setMmkToThbBuyingRateDraft] = useState<string | null>(null);
@@ -115,6 +117,22 @@ export function RateSettings() {
   const current = trpc.exchangeRates.current.useQuery();
   const history = trpc.exchangeRates.history.useQuery();
   const createRate = trpc.exchangeRates.create.useMutation();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (isOpen && !dialog.open) {
+      dialog.showModal();
+      document.body.style.overflow = "hidden";
+    } else if (!isOpen && dialog.open) {
+      dialog.close();
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   const baseRate = baseRateDraft ?? current.data?.baseRate ?? "";
   const thbToMmkSellingRate = thbToMmkSellingRateDraft ?? current.data?.thbToMmkCustomerRate ?? "";
@@ -142,6 +160,27 @@ export function RateSettings() {
 
   const currentConfiguration = current.data ? configurationFromStoredRate(current.data) : null;
 
+  function resetDrafts() {
+    const currentLocal = getYangonDateTime();
+    setBaseRateDraft(null);
+    setThbToMmkSellingRateDraft(null);
+    setMmkToThbBuyingRateDraft(null);
+    setEffectiveAt(`${currentLocal.date}T${currentLocal.time}`);
+    setError(null);
+  }
+
+  function openDialog() {
+    resetDrafts();
+    setSuccess(null);
+    setIsOpen(true);
+  }
+
+  function closeDialog() {
+    if (createRate.isPending) return;
+    resetDrafts();
+    setIsOpen(false);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -160,7 +199,8 @@ export function RateSettings() {
       setBaseRateDraft(null);
       setThbToMmkSellingRateDraft(null);
       setMmkToThbBuyingRateDraft(null);
-      setSuccess("Saved.");
+      setSuccess("Rate saved.");
+      setIsOpen(false);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Unable to save the rate version.";
       setError(rateErrorMessage(message));
@@ -169,6 +209,22 @@ export function RateSettings() {
 
   return (
     <div className="space-y-6">
+      <header className="flex items-center justify-between gap-5 border-b border-[var(--hairline)] pb-5">
+        <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
+          Exchange Rate
+        </h1>
+        <Button onClick={openDialog}>New Rate</Button>
+      </header>
+
+      {success ? (
+        <p
+          className="border-l-4 border-[var(--success)] bg-[#e8f8f0] px-5 py-4 text-sm"
+          role="status"
+        >
+          {success}
+        </p>
+      ) : null}
+
       <section
         aria-labelledby="current-rate-heading"
         className="border border-[var(--hairline)] bg-white"
@@ -219,94 +275,6 @@ export function RateSettings() {
           </p>
         )}
       </section>
-
-      <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
-        <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-7">
-          <h2 className="text-lg font-semibold text-[var(--ink)]">New Rate</h2>
-        </div>
-
-        <div className="grid gap-5 p-5 sm:p-7">
-          <Field label="Base Rate">
-            <Input
-              disabled={createRate.isPending}
-              inputMode="decimal"
-              onChange={(event) => setBaseRateDraft(event.target.value)}
-              placeholder="0.00748"
-              required
-              value={baseRate}
-            />
-          </Field>
-          <Field label="THB to MMK · Sell Rate">
-            <Input
-              disabled={createRate.isPending}
-              inputMode="decimal"
-              onChange={(event) => setThbToMmkSellingRateDraft(event.target.value)}
-              placeholder="0.00765"
-              required
-              value={thbToMmkSellingRate}
-            />
-          </Field>
-          <Field label="MMK to THB · Buy Rate">
-            <Input
-              disabled={createRate.isPending}
-              inputMode="decimal"
-              onChange={(event) => setMmkToThbBuyingRateDraft(event.target.value)}
-              placeholder="0.00740"
-              required
-              value={mmkToThbBuyingRate}
-            />
-          </Field>
-          <Field label="Date">
-            <Input
-              disabled={createRate.isPending}
-              onChange={(event) => setEffectiveAt(event.target.value)}
-              required
-              type="datetime-local"
-              value={effectiveAt}
-            />
-          </Field>
-          <div>
-            <Field label="Note (Optional)">
-              <Input disabled={createRate.isPending} maxLength={500} name="note" />
-            </Field>
-          </div>
-        </div>
-
-        <ProfitStrip
-          buyingProfit={configuration.value?.mmkToThbProfitPerHundredThousand}
-          sellingProfit={configuration.value?.thbToMmkProfitPerHundredThousand}
-        />
-
-        {configuration.error ? (
-          <p
-            className="mx-5 mt-5 border-l-4 border-[var(--warning)] bg-[#fff8df] p-3 text-sm sm:mx-7"
-            role="alert"
-          >
-            {configuration.error}
-          </p>
-        ) : null}
-        {error ? (
-          <p
-            className="mx-5 mt-5 border-l-4 border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm sm:mx-7"
-            role="alert"
-          >
-            {error}
-          </p>
-        ) : null}
-        {success ? (
-          <p
-            className="mx-5 mt-5 border-l-4 border-[var(--success)] bg-[#e8f8f0] p-3 text-sm sm:mx-7"
-            role="status"
-          >
-            {success}
-          </p>
-        ) : null}
-        <div className="flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7">
-          <Button disabled={createRate.isPending || !configuration.value} type="submit">
-            {createRate.isPending ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      </form>
 
       <section
         aria-labelledby="rate-history-heading"
@@ -391,6 +359,132 @@ export function RateSettings() {
           <p className="px-5 py-8 text-sm text-[var(--ink-muted)]">No history yet.</p>
         )}
       </section>
+
+      <dialog
+        aria-labelledby="new-rate-title"
+        aria-modal="true"
+        className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[720px] sm:border sm:border-[var(--hairline)]"
+        onCancel={(event) => {
+          event.preventDefault();
+          closeDialog();
+        }}
+        onClose={() => setIsOpen(false)}
+        ref={dialogRef}
+      >
+        <div className="flex h-dvh flex-col bg-white sm:h-auto sm:max-h-[calc(100dvh_-_3rem)]">
+          <header className="flex shrink-0 items-center justify-between gap-5 border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-4 sm:px-7">
+            <div>
+              <p className="text-[10px] font-semibold tracking-[0.1em] text-[var(--primary)] uppercase">
+                Exchange Rate
+              </p>
+              <h2
+                className="mt-1 font-[var(--font-display)] text-xl font-medium text-[var(--ink)]"
+                id="new-rate-title"
+              >
+                New Rate
+              </h2>
+            </div>
+            <button
+              aria-label="Close new rate"
+              className="grid size-10 shrink-0 place-items-center rounded-[4px] border border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={createRate.isPending}
+              onClick={closeDialog}
+              title="Close"
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {isOpen ? (
+              <form onSubmit={submit}>
+                <div className="grid gap-5 p-5 sm:p-7">
+                  <Field label="Base Rate">
+                    <Input
+                      autoFocus
+                      disabled={createRate.isPending}
+                      inputMode="decimal"
+                      onChange={(event) => setBaseRateDraft(event.target.value)}
+                      placeholder="0.00748"
+                      required
+                      value={baseRate}
+                    />
+                  </Field>
+                  <Field label="THB to MMK · Sell Rate">
+                    <Input
+                      disabled={createRate.isPending}
+                      inputMode="decimal"
+                      onChange={(event) => setThbToMmkSellingRateDraft(event.target.value)}
+                      placeholder="0.00765"
+                      required
+                      value={thbToMmkSellingRate}
+                    />
+                  </Field>
+                  <Field label="MMK to THB · Buy Rate">
+                    <Input
+                      disabled={createRate.isPending}
+                      inputMode="decimal"
+                      onChange={(event) => setMmkToThbBuyingRateDraft(event.target.value)}
+                      placeholder="0.00740"
+                      required
+                      value={mmkToThbBuyingRate}
+                    />
+                  </Field>
+                  <Field label="Date">
+                    <Input
+                      disabled={createRate.isPending}
+                      onChange={(event) => setEffectiveAt(event.target.value)}
+                      required
+                      type="datetime-local"
+                      value={effectiveAt}
+                    />
+                  </Field>
+                  <Field label="Note (Optional)">
+                    <Input disabled={createRate.isPending} maxLength={500} name="note" />
+                  </Field>
+                </div>
+
+                <ProfitStrip
+                  buyingProfit={configuration.value?.mmkToThbProfitPerHundredThousand}
+                  sellingProfit={configuration.value?.thbToMmkProfitPerHundredThousand}
+                />
+
+                {configuration.error ? (
+                  <p
+                    className="mx-5 mt-5 border-l-4 border-[var(--warning)] bg-[#fff8df] p-3 text-sm sm:mx-7"
+                    role="alert"
+                  >
+                    {configuration.error}
+                  </p>
+                ) : null}
+                {error ? (
+                  <p
+                    className="mx-5 mt-5 border-l-4 border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm sm:mx-7"
+                    role="alert"
+                  >
+                    {error}
+                  </p>
+                ) : null}
+                <div className="sticky bottom-0 flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7">
+                  <Button disabled={createRate.isPending || !configuration.value} type="submit">
+                    {createRate.isPending ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              </form>
+            ) : null}
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }

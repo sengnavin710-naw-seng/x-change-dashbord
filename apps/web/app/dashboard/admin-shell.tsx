@@ -6,13 +6,9 @@ import { SignOutButton } from "./sign-out-button";
 
 interface AdminShellProps {
   children: ReactNode;
-  user: {
-    email: string;
-    name: string;
-  };
 }
 
-export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
+export function AdminShell({ children }: Readonly<AdminShellProps>) {
   return (
     <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink-slate)]" lang="en">
       <header className="sticky top-0 z-30 border-b border-[var(--hairline)] bg-[color:var(--canvas)/0.96] px-4 backdrop-blur sm:px-6 lg:hidden">
@@ -34,7 +30,7 @@ export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
             </summary>
             <div className="absolute right-0 mt-2 w-[min(88vw,340px)] border border-[var(--hairline)] bg-[var(--canvas)] p-3 shadow-[0_12px_32px_rgba(0,21,60,0.12)]">
               <DashboardNavigation mobile />
-              <div className="mt-3 border-t border-[var(--hairline)] pt-3">
+              <div className="mt-3 pt-3">
                 <SignOutButton />
               </div>
             </div>
@@ -58,15 +54,11 @@ export function AdminShell({ children, user }: Readonly<AdminShellProps>) {
           </span>
         </Link>
 
-        <div className="flex-1 overflow-y-auto px-3 py-6">
+        <div className="scrollbar-hidden flex-1 overflow-y-auto overscroll-contain px-3 py-6">
           <DashboardNavigation />
         </div>
 
-        <div className="border-t border-[var(--hairline)] p-4">
-          <div className="mb-4 min-w-0">
-            <p className="truncate text-xs font-semibold text-[var(--ink)]">{user.name}</p>
-            <p className="mt-1 truncate text-[10px] text-[var(--ink-muted)]">{user.email}</p>
-          </div>
+        <div className="p-4">
           <SignOutButton />
         </div>
       </aside>

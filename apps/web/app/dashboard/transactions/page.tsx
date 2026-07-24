@@ -4,24 +4,27 @@ import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
 
+import { TransactionFilters, type TransactionRange } from "./transaction-filters";
+
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "All Transactions" };
 
 type TransactionType = "cash-bank" | "exchange" | "expense";
 type Currency = "MMK" | "THB";
 type Order = "newest" | "oldest";
-type Range = "custom" | "month" | "today";
 type SearchParams = Record<string, string | string[] | undefined>;
 
-const controlClass =
-  "h-11 w-full rounded-[4px] border border-[var(--hairline-soft)] bg-white px-3 text-sm text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2]";
+const transactionGridColumns =
+  "132px 96px 110px minmax(130px,1fr) minmax(104px,0.8fr) minmax(104px,0.8fr) 108px 54px";
 
 function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
 function isDate(value: string | undefined): value is string {
-  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function todayInYangon() {
@@ -33,6 +36,26 @@ function todayInYangon() {
   }).formatToParts(new Date());
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${value.year}-${value.month}-${value.day}`;
+}
+
+function offsetCalendarDate(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function firstDayOfWeek(date: string) {
+  const value = new Date(`${date}T00:00:00Z`);
+  const daysSinceMonday = (value.getUTCDay() + 6) % 7;
+  return offsetCalendarDate(date, -daysSinceMonday);
+}
+
+function previousMonth(date: string) {
+  const lastDay = offsetCalendarDate(`${date.slice(0, 7)}-01`, -1);
+  return {
+    from: `${lastDay.slice(0, 7)}-01`,
+    to: lastDay,
+  };
 }
 
 function formatMoney(value: string, currency: Currency) {
@@ -66,11 +89,20 @@ function labelForType(type: TransactionType) {
   return "Expenses";
 }
 
-function detailForDirection(type: TransactionType, direction: string | null) {
-  if (type === "exchange") return direction === "thb-to-mmk" ? "THB to MMK" : "MMK to THB";
-  if (type === "cash-bank")
-    return direction === "bank-to-cash" ? "Bank In → Cash Out" : "Cash In → Bank Out";
-  return "Expense";
+function labelForDirection(type: TransactionType, direction: string | null) {
+  if (type === "exchange") return direction === "thb-to-mmk" ? "THB → MMK" : "MMK → THB";
+  if (type === "cash-bank") return direction === "bank-to-cash" ? "Bank → Cash" : "Cash → Bank";
+  return "—";
+}
+
+function formatMovement(
+  amount: string | null,
+  currency: Currency | null,
+  channel: "Bank" | "Cash" | null,
+) {
+  if (!amount || !currency) return "—";
+  const prefix = channel ? `${channel} · ` : "";
+  return `${prefix}${formatMoney(amount, currency)} ${currency}`;
 }
 
 function editHref(type: TransactionType, id: string) {
@@ -91,22 +123,44 @@ export default async function AllTransactionsPage({
   const values = await searchParams;
   const today = todayInYangon();
   const requestedRange = scalar(values.range);
-  const range: Range =
-    requestedRange === "month" || requestedRange === "custom" ? requestedRange : "today";
+  const parsedRange: TransactionRange =
+    requestedRange === "yesterday" ||
+    requestedRange === "week" ||
+    requestedRange === "month" ||
+    requestedRange === "last-month" ||
+    requestedRange === "custom"
+      ? requestedRange
+      : "today";
   const customFrom = scalar(values.from);
   const customTo = scalar(values.to);
   const validCustomFrom = isDate(customFrom) ? customFrom : null;
   const validCustomTo = isDate(customTo) ? customTo : null;
   const validCustomRange = Boolean(
-    validCustomFrom && validCustomTo && validCustomFrom <= validCustomTo,
+    validCustomFrom && validCustomTo && validCustomFrom <= validCustomTo && validCustomTo <= today,
   );
+  const range: TransactionRange =
+    parsedRange === "custom" && !validCustomRange ? "today" : parsedRange;
+  const lastMonth = previousMonth(today);
   const fromDate =
-    range === "month"
-      ? `${today.slice(0, 7)}-01`
-      : range === "custom" && validCustomRange && validCustomFrom
-        ? validCustomFrom
-        : today;
-  const toDate = range === "custom" && validCustomRange && validCustomTo ? validCustomTo : today;
+    range === "yesterday"
+      ? offsetCalendarDate(today, -1)
+      : range === "week"
+        ? firstDayOfWeek(today)
+        : range === "month"
+          ? `${today.slice(0, 7)}-01`
+          : range === "last-month"
+            ? lastMonth.from
+            : range === "custom" && validCustomRange && validCustomFrom
+              ? validCustomFrom
+              : today;
+  const toDate =
+    range === "yesterday"
+      ? offsetCalendarDate(today, -1)
+      : range === "last-month"
+        ? lastMonth.to
+        : range === "custom" && validCustomRange && validCustomTo
+          ? validCustomTo
+          : today;
   const requestedType = scalar(values.type);
   const type: TransactionType | undefined =
     requestedType === "exchange" || requestedType === "cash-bank" || requestedType === "expense"
@@ -129,116 +183,35 @@ export default async function AllTransactionsPage({
     ...(type ? { type } : {}),
   });
   const query = new URLSearchParams();
-  query.set("range", range);
-  query.set("from", fromDate);
-  query.set("to", toDate);
+  if (range !== "today") query.set("range", range);
+  if (range === "custom") {
+    query.set("from", fromDate);
+    query.set("to", toDate);
+  }
   if (type) query.set("type", type);
   if (currency) query.set("currency", currency);
-  query.set("order", order);
-  const filterActive = range === "custom" || Boolean(type || currency) || order === "oldest";
+  if (order === "oldest") query.set("order", order);
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 border-b border-[var(--hairline)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-            All Transactions
-          </h1>
-          <p className="mt-2 text-sm tabular-nums text-[var(--ink-muted)]">
-            {fromDate === toDate ? fromDate : `${fromDate} — ${toDate}`} · {result.total} entries
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2" aria-label="Date range shortcuts">
-          <Link
-            className={`rounded-[4px] border px-3 py-2 text-xs font-semibold transition-colors ${
-              range === "today"
-                ? "border-[var(--primary)] bg-[var(--primary)] text-white"
-                : "border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] hover:border-[var(--ink-muted)]"
-            }`}
-            href="/dashboard/transactions?range=today"
-          >
-            Today
-          </Link>
-          <Link
-            className={`rounded-[4px] border px-3 py-2 text-xs font-semibold transition-colors ${
-              range === "month"
-                ? "border-[var(--primary)] bg-[var(--primary)] text-white"
-                : "border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] hover:border-[var(--ink-muted)]"
-            }`}
-            href="/dashboard/transactions?range=month"
-          >
-            This Month
-          </Link>
-        </div>
+      <header className="flex items-end justify-between gap-4 border-b border-[var(--hairline)] pb-6">
+        <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
+          All Transactions
+        </h1>
+        <p className="pb-1 text-xs font-semibold text-[var(--ink-muted)]">
+          {result.total} {result.total === 1 ? "Transaction" : "Transactions"}
+        </p>
       </header>
 
-      <details className="border border-[var(--hairline)] bg-white" open={filterActive}>
-        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset sm:px-6">
-          Filters
-        </summary>
-        <form className="max-w-[560px] space-y-5 border-t border-[var(--hairline)] p-5 sm:p-6">
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[var(--ink)]">Date Range</span>
-            <select className={controlClass} defaultValue={range} name="range">
-              <option value="today">Today</option>
-              <option value="month">This Month</option>
-              <option value="custom">Custom Date Range</option>
-            </select>
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[var(--ink)]">Start Date</span>
-            <input
-              className={controlClass}
-              defaultValue={fromDate}
-              name="from"
-              required
-              type="date"
-            />
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[var(--ink)]">End Date</span>
-            <input className={controlClass} defaultValue={toDate} name="to" required type="date" />
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[var(--ink)]">Transaction Type</span>
-            <select className={controlClass} defaultValue={type ?? ""} name="type">
-              <option value="">All Types</option>
-              <option value="exchange">Exchange</option>
-              <option value="cash-bank">Cash ↔ Bank</option>
-              <option value="expense">Expenses</option>
-            </select>
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[var(--ink)]">Currency</span>
-            <select className={controlClass} defaultValue={currency ?? ""} name="currency">
-              <option value="">All Currencies</option>
-              <option value="THB">THB</option>
-              <option value="MMK">MMK</option>
-            </select>
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[var(--ink)]">Order</span>
-            <select className={controlClass} defaultValue={order} name="order">
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-            </select>
-          </label>
-          <div className="flex flex-col-reverse gap-3 border-t border-[var(--hairline)] pt-5 sm:flex-row sm:justify-end">
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-[4px] border border-[var(--hairline-soft)] bg-white px-4 text-sm font-semibold text-[var(--ink-secondary)] hover:border-[var(--ink-muted)]"
-              href="/dashboard/transactions"
-            >
-              Reset
-            </Link>
-            <button
-              className="h-11 rounded-[4px] bg-[var(--primary)] px-5 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
-              type="submit"
-            >
-              Apply Filters
-            </button>
-          </div>
-        </form>
-      </details>
+      <TransactionFilters
+        {...(currency ? { currency } : {})}
+        fromDate={fromDate}
+        order={order}
+        range={range}
+        toDate={toDate}
+        today={today}
+        {...(type ? { type } : {})}
+      />
 
       <section className="border border-[var(--hairline)] bg-white" aria-label="Transactions">
         {result.items.length === 0 ? (
@@ -250,12 +223,17 @@ export default async function AllTransactionsPage({
           </div>
         ) : (
           <>
-            <div className="hidden grid-cols-[145px_130px_minmax(190px,1fr)_140px_140px_70px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase xl:grid">
+            <div
+              className="hidden items-center border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase xl:grid"
+              style={{ gridTemplateColumns: transactionGridColumns }}
+            >
               <span>Date / Time</span>
               <span>Type</span>
-              <span>Details</span>
-              <span className="text-right">Amount</span>
-              <span className="text-right">Profit / Fee</span>
+              <span>Direction</span>
+              <span>Description / Particular</span>
+              <span className="text-right">IN</span>
+              <span className="text-right">OUT</span>
+              <span className="text-right">Profit</span>
               <span className="text-right">Action</span>
             </div>
             <div className="hidden divide-y divide-[var(--hairline)] xl:block">
@@ -263,24 +241,29 @@ export default async function AllTransactionsPage({
                 const dateTime = formatDateTime(item.transactionAt);
                 return (
                   <article
-                    className="grid grid-cols-[145px_130px_minmax(190px,1fr)_140px_140px_70px] items-center px-5 py-4 text-sm"
+                    className="grid items-center px-5 py-4 text-sm"
                     key={`${item.type}-${item.id}`}
+                    style={{ gridTemplateColumns: transactionGridColumns }}
                   >
                     <div className="tabular-nums">
                       <p className="font-semibold text-[var(--ink)]">{dateTime.date}</p>
                       <p className="mt-1 text-xs text-[var(--ink-muted)]">{dateTime.time}</p>
                     </div>
                     <p className="font-semibold text-[var(--ink)]">{labelForType(item.type)}</p>
-                    <div className="min-w-0 pr-5">
-                      <p className="truncate text-[var(--ink-secondary)]">
-                        {item.description || "No description"}
-                      </p>
-                      <p className="mt-1 text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                        {detailForDirection(item.type, item.direction)}
-                      </p>
-                    </div>
+                    <p className="pr-4 font-medium text-[var(--ink-secondary)]">
+                      {labelForDirection(item.type, item.direction)}
+                    </p>
+                    <p
+                      className="min-w-0 truncate pr-4 text-[var(--ink-secondary)]"
+                      title={item.description || "-"}
+                    >
+                      {item.description || "-"}
+                    </p>
                     <p className="text-right font-semibold tabular-nums text-[var(--ink)]">
-                      {formatMoney(item.amount, item.currency)} {item.currency}
+                      {formatMovement(item.inAmount, item.inCurrency, item.inChannel)}
+                    </p>
+                    <p className="text-right font-semibold tabular-nums text-[var(--ink)]">
+                      {formatMovement(item.outAmount, item.outCurrency, item.outChannel)}
                     </p>
                     <p className="text-right font-semibold tabular-nums text-[var(--ink-secondary)]">
                       {item.profitAmount && item.profitCurrency
@@ -288,7 +271,7 @@ export default async function AllTransactionsPage({
                         : "—"}
                     </p>
                     <Link
-                      className="text-right text-xs font-semibold text-[var(--primary-dark)] underline underline-offset-4"
+                      className="justify-self-end text-xs font-semibold text-[var(--primary-dark)] underline underline-offset-4"
                       href={editHref(item.type, item.id)}
                     >
                       Edit
@@ -317,23 +300,31 @@ export default async function AllTransactionsPage({
                       </Link>
                     </div>
                     <p className="mt-4 text-sm text-[var(--ink-secondary)]">
-                      {item.description || "No description"}
+                      {item.description || "-"}
                     </p>
-                    <p className="mt-1 text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                      {detailForDirection(item.type, item.direction)}
+                    <p className="mt-2 text-xs font-medium text-[var(--ink-muted)]">
+                      {labelForDirection(item.type, item.direction)}
                     </p>
-                    <div className="mt-5 grid grid-cols-2 gap-px bg-[var(--hairline)] border border-[var(--hairline)]">
+                    <div className="mt-5 grid grid-cols-2 border border-[var(--hairline)] bg-[var(--hairline)] gap-px">
                       <div className="bg-white p-3">
                         <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                          Amount
+                          IN
                         </p>
                         <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">
-                          {formatMoney(item.amount, item.currency)} {item.currency}
+                          {formatMovement(item.inAmount, item.inCurrency, item.inChannel)}
                         </p>
                       </div>
                       <div className="bg-white p-3">
                         <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                          Profit / Fee
+                          OUT
+                        </p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">
+                          {formatMovement(item.outAmount, item.outCurrency, item.outChannel)}
+                        </p>
+                      </div>
+                      <div className="col-span-2 bg-white p-3">
+                        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
+                          Profit
                         </p>
                         <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">
                           {item.profitAmount && item.profitCurrency

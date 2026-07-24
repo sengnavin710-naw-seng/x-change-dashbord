@@ -14,6 +14,30 @@ const dateSchema = z
 
 const totalSchema = z.object({ value: z.string() });
 
+const dashboardInputSchema = z
+  .object({
+    date: dateSchema,
+    profitFromDate: dateSchema.optional(),
+    profitToDate: dateSchema.optional(),
+  })
+  .superRefine((value, context) => {
+    if (Boolean(value.profitFromDate) !== Boolean(value.profitToDate)) {
+      context.addIssue({
+        code: "custom",
+        message: "Profit start and end dates must be provided together",
+        path: ["profitFromDate"],
+      });
+    }
+
+    if (value.profitFromDate && value.profitToDate && value.profitFromDate > value.profitToDate) {
+      context.addIssue({
+        code: "custom",
+        message: "Profit start date must be on or before the end date",
+        path: ["profitFromDate"],
+      });
+    }
+  });
+
 function previousCalendarDate(date: string) {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() - 1);
@@ -21,8 +45,10 @@ function previousCalendarDate(date: string) {
 }
 
 export const dashboardRouter = createTRPCRouter({
-  today: protectedProcedure.input(z.object({ date: dateSchema })).query(async ({ ctx, input }) => {
+  today: protectedProcedure.input(dashboardInputSchema).query(async ({ ctx, input }) => {
     const monthStartDate = `${input.date.slice(0, 7)}-01`;
+    const profitFromDate = input.profitFromDate ?? monthStartDate;
+    const profitToDate = input.profitToDate ?? input.date;
     const [configuration] = await ctx.database
       .select()
       .from(balanceConfiguration)
@@ -58,7 +84,7 @@ export const dashboardRouter = createTRPCRouter({
           )
       : [];
 
-    const recentExchanges = await ctx.database
+    const latestExchanges = await ctx.database
       .select({
         actualPayout: exchangeTransaction.actualPayout,
         createdAt: exchangeTransaction.createdAt,
@@ -71,15 +97,10 @@ export const dashboardRouter = createTRPCRouter({
         transactionDate: exchangeTransaction.transactionDate,
       })
       .from(exchangeTransaction)
-      .where(
-        and(
-          eq(exchangeTransaction.transactionDate, input.date),
-          isNull(exchangeTransaction.voidedAt),
-        ),
-      )
-      .orderBy(desc(exchangeTransaction.createdAt))
+      .where(isNull(exchangeTransaction.voidedAt))
+      .orderBy(desc(exchangeTransaction.transactionAt), desc(exchangeTransaction.createdAt))
       .limit(8);
-    const recentCashBank = await ctx.database
+    const latestCashBank = await ctx.database
       .select({
         createdAt: cashBankTransaction.createdAt,
         currency: cashBankTransaction.currency,
@@ -92,15 +113,14 @@ export const dashboardRouter = createTRPCRouter({
         transactionDate: cashBankTransaction.transactionDate,
       })
       .from(cashBankTransaction)
-      .where(
-        and(
-          eq(cashBankTransaction.transactionDate, input.date),
-          isNull(cashBankTransaction.voidedAt),
-        ),
+      .where(isNull(cashBankTransaction.voidedAt))
+      .orderBy(
+        desc(cashBankTransaction.transactionDate),
+        desc(cashBankTransaction.transactionAt),
+        desc(cashBankTransaction.createdAt),
       )
-      .orderBy(desc(cashBankTransaction.createdAt))
       .limit(8);
-    const recentExpenses = await ctx.database
+    const latestExpenses = await ctx.database
       .select({
         amount: expense.amount,
         createdAt: expense.createdAt,
@@ -111,8 +131,8 @@ export const dashboardRouter = createTRPCRouter({
         transactionDate: expense.transactionDate,
       })
       .from(expense)
-      .where(and(eq(expense.transactionDate, input.date), isNull(expense.voidedAt)))
-      .orderBy(desc(expense.createdAt))
+      .where(isNull(expense.voidedAt))
+      .orderBy(desc(expense.transactionDate), desc(expense.transactionAt), desc(expense.createdAt))
       .limit(8);
     const [cashBankFees] = await ctx.database
       .select({
@@ -134,19 +154,19 @@ export const dashboardRouter = createTRPCRouter({
       .from(expense)
       .where(and(eq(expense.transactionDate, input.date), isNull(expense.voidedAt)));
 
-    const [monthlyExchangeProfit] = await ctx.database
+    const [rangeExchangeProfit] = await ctx.database
       .select({
         value: sql<string>`coalesce(sum(${exchangeTransaction.formulaProfitThb}), 0)::numeric(20, 4)::text`,
       })
       .from(exchangeTransaction)
       .where(
         and(
-          gte(exchangeTransaction.transactionDate, monthStartDate),
-          lte(exchangeTransaction.transactionDate, input.date),
+          gte(exchangeTransaction.transactionDate, profitFromDate),
+          lte(exchangeTransaction.transactionDate, profitToDate),
           isNull(exchangeTransaction.voidedAt),
         ),
       );
-    const [monthlyCashBankFees] = await ctx.database
+    const [rangeCashBankFees] = await ctx.database
       .select({
         mmk: sql<string>`coalesce(sum(case when ${cashBankTransaction.currency} = 'MMK' then ${cashBankTransaction.feeAmount} else 0 end), 0)::numeric(20, 4)::text`,
         thb: sql<string>`coalesce(sum(case when ${cashBankTransaction.currency} = 'THB' then ${cashBankTransaction.feeAmount} else 0 end), 0)::numeric(20, 4)::text`,
@@ -154,14 +174,14 @@ export const dashboardRouter = createTRPCRouter({
       .from(cashBankTransaction)
       .where(
         and(
-          gte(cashBankTransaction.transactionDate, monthStartDate),
-          lte(cashBankTransaction.transactionDate, input.date),
+          gte(cashBankTransaction.transactionDate, profitFromDate),
+          lte(cashBankTransaction.transactionDate, profitToDate),
           isNull(cashBankTransaction.voidedAt),
         ),
       );
 
     const exchangeTotal = totalSchema.parse(exchangeProfit ?? { value: "0" }).value;
-    const monthlyExchangeTotal = totalSchema.parse(monthlyExchangeProfit ?? { value: "0" }).value;
+    const rangeExchangeTotal = totalSchema.parse(rangeExchangeProfit ?? { value: "0" }).value;
 
     return {
       balanceConfiguration: configuration
@@ -182,19 +202,19 @@ export const dashboardRouter = createTRPCRouter({
           }
         : null,
       date: input.date,
-      profitThisMonth: {
-        fromDate: monthStartDate,
-        mmk: monthlyCashBankFees?.mmk ?? "0.0000",
-        thb: addMoney(monthlyExchangeTotal, monthlyCashBankFees?.thb ?? "0.0000"),
-        toDate: input.date,
+      profitForRange: {
+        fromDate: profitFromDate,
+        mmk: rangeCashBankFees?.mmk ?? "0.0000",
+        thb: addMoney(rangeExchangeTotal, rangeCashBankFees?.thb ?? "0.0000"),
+        toDate: profitToDate,
       },
-      recentTransactions: [
-        ...recentExchanges.map((transaction) => ({
+      latestTransactions: [
+        ...latestExchanges.map((transaction) => ({
           ...transaction,
           transactionAt: transaction.transactionAt.toISOString(),
           type: "exchange" as const,
         })),
-        ...recentCashBank.map((transaction) => ({
+        ...latestCashBank.map((transaction) => ({
           ...transaction,
           transactionAt: effectiveTransactionAt(
             transaction.transactionDate,
@@ -203,7 +223,7 @@ export const dashboardRouter = createTRPCRouter({
           ).toISOString(),
           type: "cash-bank" as const,
         })),
-        ...recentExpenses.map((transaction) => ({
+        ...latestExpenses.map((transaction) => ({
           ...transaction,
           transactionAt: effectiveTransactionAt(
             transaction.transactionDate,
@@ -213,7 +233,11 @@ export const dashboardRouter = createTRPCRouter({
           type: "expense" as const,
         })),
       ]
-        .sort((left, right) => Date.parse(right.transactionAt) - Date.parse(left.transactionAt))
+        .sort((left, right) => {
+          const difference = Date.parse(right.transactionAt) - Date.parse(left.transactionAt);
+          if (difference !== 0) return difference;
+          return `${left.type}-${left.id}`.localeCompare(`${right.type}-${right.id}`);
+        })
         .slice(0, 8)
         .map((transaction) => ({
           ...transaction,

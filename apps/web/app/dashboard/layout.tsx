@@ -13,5 +13,5 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
     redirect("/login");
   }
 
-  return <AdminShell user={session.user}>{children}</AdminShell>;
+  return <AdminShell>{children}</AdminShell>;
 }

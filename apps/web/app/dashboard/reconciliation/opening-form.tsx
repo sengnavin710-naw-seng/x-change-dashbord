@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { normalizeMoneyInput } from "@repo/api/operations";
 import { Button } from "@repo/ui/button";
@@ -9,7 +9,7 @@ import { Input } from "@repo/ui/input";
 
 import { trpc } from "@/trpc/client";
 
-interface BalanceConfiguration {
+export interface BalanceConfiguration {
   calculationStartDate: string;
   checkpointMmk: string;
   checkpointThb: string;
@@ -43,16 +43,26 @@ function submissionError(cause: unknown) {
 
 export function BalanceConfigurationForm({
   defaultCheckpointDate,
+  embedded = false,
   initial,
+  onPendingChange,
+  onSaved,
 }: Readonly<{
   defaultCheckpointDate: string;
+  embedded?: boolean;
   initial: BalanceConfiguration | null;
+  onPendingChange?: (pending: boolean) => void;
+  onSaved?: () => void;
 }>) {
   const router = useRouter();
   const mutation = trpc.operations.saveBalanceConfiguration.useMutation();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<MoneyFieldErrors>({});
+
+  useEffect(() => {
+    onPendingChange?.(mutation.isPending);
+  }, [mutation.isPending, onPendingChange]);
 
   function clearFieldError(field: MoneyField) {
     setError(null);
@@ -96,86 +106,110 @@ export function BalanceConfigurationForm({
         note: value(form, "note") || undefined,
         reason: value(form, "reason") || undefined,
       });
-      setMessage("Balance setup saved.");
       router.refresh();
+      if (onSaved) {
+        onSaved();
+      } else {
+        setMessage("Balance setup saved.");
+      }
     } catch (cause) {
       setError(submissionError(cause));
     }
   }
 
   return (
-    <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
-      <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-7">
-        <h2 className="text-lg font-semibold text-[var(--ink)]">
-          {initial ? "Edit Balance Setup" : "Set Up Balances"}
-        </h2>
-      </div>
-      <div className="grid gap-5 p-5 sm:p-7 [&>label]:block">
-        <MoneyField
-          defaultValue={initial?.openingThb}
-          disabled={mutation.isPending}
-          error={fieldErrors.openingThb}
-          label="Opening Balance THB"
-          name="openingThb"
-          onChange={() => clearFieldError("openingThb")}
-          placeholder="235,299"
-        />
-        <MoneyField
-          defaultValue={initial?.openingMmk}
-          disabled={mutation.isPending}
-          error={fieldErrors.openingMmk}
-          label="Opening Balance MMK"
-          name="openingMmk"
-          onChange={() => clearFieldError("openingMmk")}
-          placeholder="5,918,129"
-        />
-        <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">
-            Previous Closing Date
-          </span>
-          <Input
-            defaultValue={defaultCheckpointDate}
+    <form
+      className={embedded ? "bg-white" : "max-w-[720px] border border-[var(--hairline)] bg-white"}
+      onSubmit={submit}
+    >
+      {!embedded ? (
+        <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-7">
+          <h2 className="text-lg font-semibold text-[var(--ink)]">
+            {initial ? "Edit Balance Setup" : "Set Up Balances"}
+          </h2>
+        </div>
+      ) : null}
+      <div className="grid gap-6 p-5 sm:p-7">
+        <fieldset className="grid gap-5">
+          <legend className="mb-1 text-sm font-semibold text-[var(--ink)]">Opening Balance</legend>
+          <MoneyField
+            defaultValue={initial?.openingThb}
             disabled={mutation.isPending}
-            name="checkpointDate"
-            required
-            type="date"
+            error={fieldErrors.openingThb}
+            label="Opening Balance THB"
+            name="openingThb"
+            onChange={() => clearFieldError("openingThb")}
+            placeholder="235,299"
           />
-        </label>
-        <MoneyField
-          defaultValue={initial?.checkpointThb}
-          disabled={mutation.isPending}
-          error={fieldErrors.checkpointThb}
-          label="Previous Closing Balance THB"
-          name="checkpointThb"
-          onChange={() => clearFieldError("checkpointThb")}
-          placeholder="128,200"
-        />
-        <MoneyField
-          defaultValue={initial?.checkpointMmk}
-          disabled={mutation.isPending}
-          error={fieldErrors.checkpointMmk}
-          label="Previous Closing Balance MMK"
-          name="checkpointMmk"
-          onChange={() => clearFieldError("checkpointMmk")}
-          placeholder="17,407,355"
-        />
-        <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Note (Optional)</span>
-          <Input
-            defaultValue={initial?.note ?? ""}
+          <MoneyField
+            defaultValue={initial?.openingMmk}
             disabled={mutation.isPending}
-            maxLength={500}
-            name="note"
+            error={fieldErrors.openingMmk}
+            label="Opening Balance MMK"
+            name="openingMmk"
+            onChange={() => clearFieldError("openingMmk")}
+            placeholder="5,918,129"
           />
-        </label>
-        {initial ? (
+        </fieldset>
+
+        <fieldset className="grid gap-5 border-t border-[var(--hairline)] pt-6">
+          <legend className="px-0 text-sm font-semibold text-[var(--ink)]">
+            Previous Closing Balance
+          </legend>
           <label className="space-y-2">
             <span className="block text-sm font-semibold text-[var(--ink)]">
-              Edit Reason (Optional)
+              Previous Closing Date
             </span>
-            <Input disabled={mutation.isPending} maxLength={500} name="reason" />
+            <Input
+              defaultValue={defaultCheckpointDate}
+              disabled={mutation.isPending}
+              name="checkpointDate"
+              required
+              type="date"
+            />
           </label>
-        ) : null}
+          <MoneyField
+            defaultValue={initial?.checkpointThb}
+            disabled={mutation.isPending}
+            error={fieldErrors.checkpointThb}
+            label="Previous Closing Balance THB"
+            name="checkpointThb"
+            onChange={() => clearFieldError("checkpointThb")}
+            placeholder="128,200"
+          />
+          <MoneyField
+            defaultValue={initial?.checkpointMmk}
+            disabled={mutation.isPending}
+            error={fieldErrors.checkpointMmk}
+            label="Previous Closing Balance MMK"
+            name="checkpointMmk"
+            onChange={() => clearFieldError("checkpointMmk")}
+            placeholder="17,407,355"
+          />
+        </fieldset>
+
+        <fieldset className="grid gap-5 border-t border-[var(--hairline)] pt-6">
+          <legend className="px-0 text-sm font-semibold text-[var(--ink)]">
+            Additional Information
+          </legend>
+          <label className="space-y-2">
+            <span className="block text-sm font-semibold text-[var(--ink)]">Note (Optional)</span>
+            <Input
+              defaultValue={initial?.note ?? ""}
+              disabled={mutation.isPending}
+              maxLength={500}
+              name="note"
+            />
+          </label>
+          {initial ? (
+            <label className="space-y-2">
+              <span className="block text-sm font-semibold text-[var(--ink)]">
+                Edit Reason (Optional)
+              </span>
+              <Input disabled={mutation.isPending} maxLength={500} name="reason" />
+            </label>
+          ) : null}
+        </fieldset>
       </div>
       {error ? (
         <p
@@ -193,9 +227,11 @@ export function BalanceConfigurationForm({
           {message}
         </p>
       ) : null}
-      <div className="flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7">
+      <div
+        className={`${embedded ? "sticky bottom-0" : ""} flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7`}
+      >
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? "Saving…" : "Save Balance Setup"}
+          {mutation.isPending ? "Saving…" : initial ? "Save Changes" : "Save Balance Setup"}
         </Button>
       </div>
     </form>

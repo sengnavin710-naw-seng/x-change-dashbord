@@ -79,7 +79,7 @@ const navigation = [
     label: "Dashboard",
     items: [
       { href: "/dashboard", icon: "overview", label: "Overview" },
-      { href: "/dashboard/summary", icon: "summary", label: "Summary" },
+      { href: "/dashboard/summary", icon: "summary", label: "Summary Details" },
     ],
   },
   {

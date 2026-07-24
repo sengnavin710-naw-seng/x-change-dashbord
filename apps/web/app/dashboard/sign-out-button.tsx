@@ -19,7 +19,13 @@ export function SignOutButton() {
   }
 
   return (
-    <Button className="w-full" disabled={isPending} onClick={signOut} size="sm" variant="outline">
+    <Button
+      className="w-full rounded-none"
+      disabled={isPending}
+      onClick={signOut}
+      size="sm"
+      variant="outline"
+    >
       {isPending ? "Signing out…" : "Sign out"}
     </Button>
   );
