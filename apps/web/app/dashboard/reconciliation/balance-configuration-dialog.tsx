@@ -15,8 +15,10 @@ export function BalanceConfigurationDialog({
   initial: BalanceConfiguration | null;
 }>) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
@@ -35,17 +37,41 @@ export function BalanceConfigurationDialog({
     };
   }, [isOpen]);
 
-  function close() {
-    if (!isPending) setIsOpen(false);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
+
+  function close(force = false) {
+    if ((!force && isPending) || isClosing) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setIsOpen(false);
+      return;
+    }
+
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, 180);
   }
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)}>{t("setUpBalance")}</Button>
+      <Button
+        onClick={() => {
+          setIsClosing(false);
+          setIsOpen(true);
+        }}
+      >
+        {t("setUpBalance")}
+      </Button>
       <dialog
         aria-labelledby="edit-balance-title"
         aria-modal="true"
-        className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[900px] sm:border sm:border-[var(--hairline)]"
+        className={`${isClosing ? "motion-closing " : ""}motion-dialog m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[900px] sm:border sm:border-[var(--hairline)]`}
         onCancel={(event) => {
           event.preventDefault();
           close();
@@ -53,7 +79,10 @@ export function BalanceConfigurationDialog({
         onClick={(event) => {
           if (event.target === event.currentTarget) close();
         }}
-        onClose={() => setIsOpen(false)}
+        onClose={() => {
+          setIsOpen(false);
+          setIsClosing(false);
+        }}
         ref={dialogRef}
       >
         <div className="flex h-dvh flex-col bg-white sm:h-auto sm:max-h-[calc(100dvh_-_3rem)]">
@@ -73,7 +102,7 @@ export function BalanceConfigurationDialog({
               aria-label={`${t("close")} ${t("balanceSetup")}`}
               className="grid size-10 shrink-0 place-items-center rounded-none border border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isPending}
-              onClick={close}
+              onClick={() => close()}
               title={t("close")}
               type="button"
             >
@@ -97,7 +126,7 @@ export function BalanceConfigurationDialog({
                 embedded
                 initial={initial}
                 onPendingChange={setIsPending}
-                onSaved={() => setIsOpen(false)}
+                onSaved={() => close(true)}
               />
             ) : null}
           </div>

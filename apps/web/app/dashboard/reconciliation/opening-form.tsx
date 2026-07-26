@@ -9,6 +9,7 @@ import { Input } from "@repo/ui/input";
 
 import { trpc } from "@/trpc/client";
 import { useLanguage } from "../../language-provider";
+import { LoadingSpinner } from "../form-controls";
 
 export interface BalanceConfiguration {
   calculationStartDate: string;
@@ -203,13 +204,13 @@ export function BalanceConfigurationForm({
             </h2>
           </div>
           <div className="grid gap-5 p-5">
-            <label className="space-y-2">
+            <label className="min-w-0 space-y-2">
               <span className="block text-sm font-semibold text-[var(--ink)]">
                 {t("balanceDate")}
               </span>
-              <span className="relative block">
+              <span className="relative block min-w-0 max-w-full">
                 <Input
-                  className="relative cursor-pointer pr-11 tabular-nums [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  className="relative block !w-full min-w-0 !max-w-full cursor-pointer appearance-none !pr-11 tabular-nums [inline-size:100%] [max-inline-size:100%] [min-inline-size:0] [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
                   defaultValue={defaultCheckpointDate}
                   disabled={mutation.isPending}
                   name="checkpointDate"
@@ -283,7 +284,14 @@ export function BalanceConfigurationForm({
         className={`${embedded ? "sticky bottom-0" : ""} mt-5 flex justify-end border border-[var(--hairline)] bg-[#f9fafb] px-5 py-4`}
       >
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? t("saving") : initial ? t("saveChanges") : t("saveBalanceSetup")}
+          {mutation.isPending ? (
+            <>
+              <LoadingSpinner className="mr-2" />
+              {t("saving")}
+            </>
+          ) : (
+            t("save")
+          )}
         </Button>
       </div>
     </form>

@@ -133,6 +133,7 @@ const english = {
   saveChanges: "Save Changes",
   saveEntry: "Save Entry",
   saving: "Saving…",
+  transactionSaved: "Transaction saved.",
   selectBothDates: "Select both start and end dates.",
   sellRate: "Sell Rate",
   setOpeningBalanceFirst:
@@ -315,6 +316,7 @@ const myanmar: Record<MessageKey, string> = {
   saveChanges: "ပြောင်းလဲမှုများ သိမ်းရန်",
   saveEntry: "စာရင်းသိမ်းရန်",
   saving: "သိမ်းနေသည်…",
+  transactionSaved: "စာရင်းကို သိမ်းပြီးပါပြီ။",
   selectBothDates: "စတင်ရက်နှင့် ပြီးဆုံးရက် နှစ်ခုလုံးကို ရွေးပါ။",
   sellRate: "ရောင်းစျေး",
   setOpeningBalanceFirst: "ငွေစာရင်းမသွင်းမီ အဖွင့်လက်ကျန်နှင့် ငွေလဲလက်ကျန်ကို သတ်မှတ်ပါ။",

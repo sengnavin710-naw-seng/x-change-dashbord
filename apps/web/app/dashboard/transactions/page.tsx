@@ -7,6 +7,7 @@ import { appRouter, createTRPCContext } from "@repo/api";
 import { TransactionFilters, type TransactionRange } from "./transaction-filters";
 import { getServerTranslator } from "../../../lib/i18n-server";
 import type { MessageKey } from "../../../lib/i18n";
+import { RecentTransactionHighlighter } from "../transaction-motion";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "All Transactions" };
@@ -222,6 +223,9 @@ export default async function AllTransactionsPage({
       />
 
       <section className="border border-[var(--hairline)] bg-white" aria-label={t("transactions")}>
+        <RecentTransactionHighlighter
+          refreshKey={result.items.map((item) => `${item.type}:${item.id}`).join("|")}
+        />
         {result.items.length === 0 ? (
           <div className="px-5 py-16 text-center sm:px-6">
             <p className="font-semibold text-[var(--ink)]">{t("noTransactions")}</p>
@@ -251,6 +255,7 @@ export default async function AllTransactionsPage({
                   return (
                     <article
                       className={`grid ${transactionHistoryGrid} items-center px-5 py-4 text-sm`}
+                      data-transaction-key={`${item.type}:${item.id}`}
                       key={`${item.type}-${item.id}`}
                     >
                       <div className="tabular-nums">

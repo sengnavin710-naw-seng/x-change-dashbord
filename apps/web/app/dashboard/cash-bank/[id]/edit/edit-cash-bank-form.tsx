@@ -9,7 +9,8 @@ import { Input } from "@repo/ui/input";
 import { getYangonDateTime, toYangonIsoFromLocalDateTime } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
 
-import { DateTimeInput, FormSelect } from "../../../form-controls";
+import { DateTimeInput, FormSelect, LoadingSpinner } from "../../../form-controls";
+import { rememberRecentTransaction } from "../../../transaction-motion";
 import { useLanguage } from "../../../../language-provider";
 
 const selectClass =
@@ -54,6 +55,7 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
         transactionAt: toYangonIsoFromLocalDateTime(value(form, "transactionDateTime")),
       });
       await utils.dashboard.today.invalidate();
+      rememberRecentTransaction({ id: record.id, type: "cash-bank" });
       router.push("/dashboard/cash-bank");
       router.refresh();
     } catch (cause) {
@@ -151,7 +153,14 @@ export function EditCashBankForm({ record }: Readonly<{ record: CashBankRecord }
           {t("cancel")}
         </Button>
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? t("updating") : t("updateRecord")}
+          {mutation.isPending ? (
+            <>
+              <LoadingSpinner className="mr-2" />
+              {t("updating")}
+            </>
+          ) : (
+            t("updateRecord")
+          )}
         </Button>
       </div>
     </form>

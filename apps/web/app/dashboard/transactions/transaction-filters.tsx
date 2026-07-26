@@ -12,6 +12,7 @@ import {
 
 import type { MessageKey } from "../../../lib/i18n";
 import { useLanguage } from "../../language-provider";
+import { useMotionPresence } from "../../use-motion-presence";
 
 export type TransactionRange = "custom" | "last-month" | "month" | "today" | "week" | "yesterday";
 
@@ -127,6 +128,9 @@ export function TransactionFilters({
   const [customTo, setCustomTo] = useState(toDate);
   const [dateError, setDateError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const desktopDatePresence = useMotionPresence(dateMenuOpen && !mobileOpen);
+  const mobilePresence = useMotionPresence(mobileOpen);
+  const mobileCustomPresence = useMotionPresence(mobileCustomOpen);
   const activeFilterCount =
     Number(range !== "today") +
     Number(Boolean(type)) +
@@ -320,10 +324,13 @@ export function TransactionFilters({
               <CalendarIcon />
               {t("date")}
             </button>
-            {dateMenuOpen && !mobileOpen ? (
+            {desktopDatePresence.present ? (
               <div
+                aria-hidden={!desktopDatePresence.visible}
                 aria-label={`${t("transaction")} ${t("dateFilter")}`}
-                className="absolute top-full left-0 z-30 mt-2 w-[640px] max-w-[calc(100vw-22rem)] border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.12)]"
+                className={`motion-disclosure absolute top-full left-0 z-30 mt-2 w-[640px] max-w-[calc(100vw-22rem)] border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.12)] ${
+                  desktopDatePresence.visible ? "motion-disclosure-open" : ""
+                }`}
                 id="transaction-date-filter"
                 role="dialog"
               >
@@ -433,9 +440,12 @@ export function TransactionFilters({
           ) : null}
         </button>
 
-        {mobileOpen ? (
+        {mobilePresence.present ? (
           <div
-            className="fixed inset-0 z-50 flex items-end bg-[rgba(0,21,60,0.28)] sm:items-center sm:justify-center sm:p-6"
+            aria-hidden={!mobilePresence.visible}
+            className={`motion-disclosure-backdrop fixed inset-0 z-50 flex items-end bg-[rgba(0,21,60,0.28)] sm:items-center sm:justify-center sm:p-6 ${
+              mobilePresence.visible ? "motion-disclosure-open" : ""
+            }`}
             onPointerDown={(event) => {
               if (event.target === event.currentTarget) {
                 setMobileOpen(false);
@@ -446,7 +456,9 @@ export function TransactionFilters({
             <section
               aria-label={t("transactionFilters")}
               aria-modal="true"
-              className="max-h-[88vh] w-full overflow-y-auto border border-[var(--hairline)] bg-white sm:max-w-[560px]"
+              className={`motion-disclosure max-h-[88vh] w-full overflow-y-auto border border-[var(--hairline)] bg-white sm:max-w-[560px] ${
+                mobilePresence.visible ? "motion-disclosure-open" : ""
+              }`}
               role="dialog"
             >
               <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4">
@@ -501,8 +513,15 @@ export function TransactionFilters({
                       {t("customRange")}
                     </button>
                   </div>
-                  {mobileCustomOpen ? (
-                    <div className="border-t border-[var(--hairline)] pt-4">{customRangeForm}</div>
+                  {mobileCustomPresence.present ? (
+                    <div
+                      aria-hidden={!mobileCustomPresence.visible}
+                      className={`motion-disclosure border-t border-[var(--hairline)] pt-4 ${
+                        mobileCustomPresence.visible ? "motion-disclosure-open" : ""
+                      }`}
+                    >
+                      {customRangeForm}
+                    </div>
                   ) : null}
                 </fieldset>
 

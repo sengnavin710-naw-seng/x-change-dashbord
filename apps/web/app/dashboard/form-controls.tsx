@@ -2,6 +2,20 @@ import type { ComponentProps } from "react";
 
 import { Input } from "@repo/ui/input";
 
+export function LoadingSpinner({ className = "" }: Readonly<{ className?: string }>) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`motion-spinner size-4 shrink-0 ${className}`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" opacity="0.25" r="9" stroke="currentColor" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+    </svg>
+  );
+}
+
 export function DateTimeInput({
   className,
   ...props

@@ -19,6 +19,10 @@
   --error-bg: #fddfdf;
   --warning: #f8b60f;
   --success: #38bd7d;
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
+  --motion-slow: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --font-display: "DM Sans", "Helvetica Neue", Arial, sans-serif;
   --font-body: Inter, "Segoe UI", Helvetica, Arial, sans-serif;
 }
@@ -49,6 +53,149 @@ input {
 ::selection {
   background: var(--surface-2);
   color: var(--ink);
+}
+
+@keyframes motion-dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes motion-dialog-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+@keyframes motion-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes motion-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-data-enter {
+  from {
+    opacity: 0.58;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes motion-row-highlight {
+  0%,
+  36% {
+    background-color: var(--surface-2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes motion-status-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motion-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.motion-dialog[open] {
+  animation: motion-dialog-enter var(--motion-slow) var(--motion-ease);
+}
+
+.motion-dialog[open]::backdrop {
+  animation: motion-backdrop-enter var(--motion-standard) ease-out;
+}
+
+.motion-dialog.motion-closing {
+  animation: motion-dialog-exit var(--motion-standard) ease-in forwards;
+}
+
+.motion-dialog.motion-closing::backdrop {
+  animation: motion-backdrop-exit var(--motion-standard) ease-in forwards;
+}
+
+.motion-disclosure {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.985);
+  transform-origin: top right;
+  transition:
+    opacity var(--motion-standard) ease-out,
+    transform var(--motion-standard) var(--motion-ease);
+}
+
+.motion-disclosure.motion-disclosure-open {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.motion-disclosure-backdrop {
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion-standard) ease-out;
+}
+
+.motion-disclosure-backdrop.motion-disclosure-open {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.motion-data-region {
+  transition: opacity var(--motion-fast) ease-out;
+}
+
+.motion-data-region[data-refreshing="true"] {
+  opacity: 0.58;
+}
+
+.motion-data-enter {
+  animation: motion-data-enter var(--motion-standard) ease-out;
+}
+
+.motion-row-highlight {
+  animation: motion-row-highlight 1.05s ease-out;
+}
+
+.motion-status {
+  animation: motion-status-enter var(--motion-standard) var(--motion-ease);
+}
+
+.motion-spinner {
+  animation: motion-spin 0.72s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

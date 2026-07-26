@@ -14,6 +14,7 @@ import {
 } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
 import { useLanguage } from "../../language-provider";
+import { LoadingSpinner } from "../form-controls";
 
 function Field({
   children,
@@ -110,7 +111,9 @@ function configurationFromStoredRate(rate: {
 export function RateSettings() {
   const { t } = useLanguage();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [baseRateDraft, setBaseRateDraft] = useState<string | null>(null);
   const [thbToMmkSellingRateDraft, setThbToMmkSellingRateDraft] = useState<string | null>(null);
   const [mmkToThbBuyingRateDraft, setMmkToThbBuyingRateDraft] = useState<string | null>(null);
@@ -135,6 +138,13 @@ export function RateSettings() {
       document.body.style.overflow = "";
     };
   }, [isOpen]);
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
 
   const baseRate = baseRateDraft ?? current.data?.baseRate ?? "";
   const thbToMmkSellingRate = thbToMmkSellingRateDraft ?? current.data?.thbToMmkCustomerRate ?? "";
@@ -172,13 +182,26 @@ export function RateSettings() {
   function openDialog() {
     resetDrafts();
     setSuccess(null);
+    setIsClosing(false);
     setIsOpen(true);
   }
 
-  function closeDialog() {
-    if (createRate.isPending) return;
-    resetDrafts();
-    setIsOpen(false);
+  function closeDialog(force = false) {
+    if ((!force && createRate.isPending) || isClosing) return;
+
+    const finish = () => {
+      resetDrafts();
+      setIsOpen(false);
+      setIsClosing(false);
+    };
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finish();
+      return;
+    }
+
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(finish, 180);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -201,7 +224,7 @@ export function RateSettings() {
       setThbToMmkSellingRateDraft(null);
       setMmkToThbBuyingRateDraft(null);
       setSuccess(t("rateSaved"));
-      setIsOpen(false);
+      closeDialog(true);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : t("unableToSaveRate");
       setError(rateErrorMessage(message));
@@ -366,12 +389,15 @@ export function RateSettings() {
       <dialog
         aria-labelledby="new-rate-title"
         aria-modal="true"
-        className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[720px] sm:border sm:border-[var(--hairline)]"
+        className={`${isClosing ? "motion-closing " : ""}motion-dialog m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[720px] sm:border sm:border-[var(--hairline)]`}
         onCancel={(event) => {
           event.preventDefault();
           closeDialog();
         }}
-        onClose={() => setIsOpen(false)}
+        onClose={() => {
+          setIsOpen(false);
+          setIsClosing(false);
+        }}
         ref={dialogRef}
       >
         <div className="flex h-dvh flex-col bg-white sm:h-auto sm:max-h-[calc(100dvh_-_3rem)]">
@@ -391,7 +417,7 @@ export function RateSettings() {
               aria-label={`${t("close")} ${t("newRate")}`}
               className="grid size-10 shrink-0 place-items-center rounded-[4px] border border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={createRate.isPending}
-              onClick={closeDialog}
+              onClick={() => closeDialog()}
               title={t("close")}
               type="button"
             >
@@ -471,7 +497,14 @@ export function RateSettings() {
                 ) : null}
                 <div className="sticky bottom-0 flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7">
                   <Button disabled={createRate.isPending || !configuration.value} type="submit">
-                    {createRate.isPending ? t("saving") : t("save")}
+                    {createRate.isPending ? (
+                      <>
+                        <LoadingSpinner className="mr-2" />
+                        {t("saving")}
+                      </>
+                    ) : (
+                      t("save")
+                    )}
                   </Button>
                 </div>
               </form>

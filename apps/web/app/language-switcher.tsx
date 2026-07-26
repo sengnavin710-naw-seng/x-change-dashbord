@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { Language } from "../lib/i18n";
 import { useLanguage } from "./language-provider";
+import { useMotionPresence } from "./use-motion-presence";
 
 export function LanguageSwitcher({
   iconOnly = false,
@@ -14,6 +15,7 @@ export function LanguageSwitcher({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const [open, setOpen] = useState(false);
+  const menuPresence = useMotionPresence(open);
 
   useEffect(() => {
     if (!open) return;
@@ -72,12 +74,13 @@ export function LanguageSwitcher({
         )}
       </button>
 
-      {open ? (
+      {menuPresence.present ? (
         <div
+          aria-hidden={!menuPresence.visible}
           aria-label={t("language")}
-          className={`absolute z-50 w-[200px] border border-[var(--hairline)] bg-white p-1 shadow-[0_12px_32px_rgba(0,21,60,0.12)] ${
-            navigation ? "bottom-full left-3 mb-1" : "top-full right-0 mt-1"
-          }`}
+          className={`motion-disclosure absolute z-50 w-[200px] border border-[var(--hairline)] bg-white p-1 shadow-[0_12px_32px_rgba(0,21,60,0.12)] ${
+            menuPresence.visible ? "motion-disclosure-open" : ""
+          } ${navigation ? "bottom-full left-3 mb-1" : "top-full right-0 mt-1"}`}
           id={menuId}
           role="menu"
         >

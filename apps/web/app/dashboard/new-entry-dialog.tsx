@@ -8,6 +8,7 @@ import type { MessageKey } from "@/lib/i18n";
 
 import { useLanguage } from "../language-provider";
 import { EntryForm } from "./new/entry-form";
+import { rememberRecentTransaction } from "./transaction-motion";
 
 type EntryType = "cash-bank" | "exchange" | "expense";
 
@@ -24,8 +25,12 @@ export function NewEntryDialog({
 }: Readonly<{ defaultDate: string; defaultTime: string; type: EntryType }>) {
   const { t } = useLanguage();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const feedbackTimerRef = useRef<number | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [showSavedFeedback, setShowSavedFeedback] = useState(false);
   const label = t(labels[type]);
   const isCompact = type === "expense";
 
@@ -45,26 +50,60 @@ export function NewEntryDialog({
     };
   }, [isOpen]);
 
-  function close() {
-    if (!isPending) setIsOpen(false);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+      if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
+    },
+    [],
+  );
+
+  function showSaved() {
+    setShowSavedFeedback(true);
+    if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = window.setTimeout(() => setShowSavedFeedback(false), 2_400);
+  }
+
+  function close(force = false) {
+    if ((!force && isPending) || isClosing) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setIsOpen(false);
+      return;
+    }
+
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, 180);
   }
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)}>{t("addTransaction")}</Button>
+      <Button
+        onClick={() => {
+          setIsClosing(false);
+          setIsOpen(true);
+        }}
+      >
+        {t("addTransaction")}
+      </Button>
       <dialog
         aria-labelledby={`new-${type}-entry-title`}
         aria-modal="true"
-        className={
+        className={`${isClosing ? "motion-closing " : ""}${
           isCompact
-            ? "m-0 h-fit max-h-dvh w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[760px] sm:border sm:border-[var(--hairline)]"
-            : "m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[760px] sm:border sm:border-[var(--hairline)]"
-        }
+            ? "motion-dialog m-0 h-fit max-h-dvh w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[760px] sm:border sm:border-[var(--hairline)]"
+            : "motion-dialog m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[760px] sm:border sm:border-[var(--hairline)]"
+        }`}
         onCancel={(event) => {
           event.preventDefault();
           close();
         }}
-        onClose={() => setIsOpen(false)}
+        onClose={() => {
+          setIsOpen(false);
+          setIsClosing(false);
+        }}
         ref={dialogRef}
       >
         <div
@@ -90,7 +129,7 @@ export function NewEntryDialog({
               aria-label={t("close")}
               className="grid size-10 shrink-0 place-items-center rounded-[4px] border border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isPending}
-              onClick={close}
+              onClick={() => close()}
               title={t("close")}
               type="button"
             >
@@ -115,13 +154,26 @@ export function NewEntryDialog({
                 embedded
                 initialEntryType={type}
                 onPendingChange={setIsPending}
-                onSaved={() => setIsOpen(false)}
+                onSaved={(transaction) => {
+                  rememberRecentTransaction(transaction);
+                  close(true);
+                  showSaved();
+                }}
                 showTypeSelector={false}
               />
             ) : null}
           </div>
         </div>
       </dialog>
+      {showSavedFeedback ? (
+        <div
+          aria-live="polite"
+          className="motion-status fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[100] border border-[var(--success)] bg-white px-4 py-3 text-sm font-semibold text-[var(--ink)] shadow-[0_12px_32px_rgba(0,21,60,0.16)]"
+          role="status"
+        >
+          {t("transactionSaved")}
+        </div>
+      ) : null}
     </>
   );
 }

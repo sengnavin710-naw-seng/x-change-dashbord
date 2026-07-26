@@ -145,7 +145,7 @@ export function DashboardNavigation({
               return (
                 <Link
                   aria-current={active ? "page" : undefined}
-                  className={`grid grid-cols-[22px_minmax(0,1fr)] items-center gap-3 border-l-2 px-3 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset ${
+                  className={`grid grid-cols-[22px_minmax(0,1fr)] items-center gap-3 border-l-2 px-3 py-3 transition-[background-color,border-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset ${
                     active
                       ? "border-[var(--primary)] bg-[var(--surface-2)] text-[var(--ink)]"
                       : "border-transparent text-[var(--ink-secondary)] hover:border-[var(--hairline-soft)] hover:bg-white"

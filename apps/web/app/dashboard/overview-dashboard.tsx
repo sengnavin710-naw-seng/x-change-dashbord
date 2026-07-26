@@ -12,7 +12,9 @@ import type { MessageKey } from "@/lib/i18n";
 import { trpc } from "@/trpc/client";
 
 import { useLanguage } from "../language-provider";
+import { useMotionPresence } from "../use-motion-presence";
 import { SingleDateFilter } from "./single-date-filter";
+import { RecentTransactionHighlighter } from "./transaction-motion";
 
 type DashboardData = inferRouterOutputs<AppRouter>["dashboard"]["today"];
 type LatestTransaction = DashboardData["latestTransactions"][number];
@@ -125,6 +127,7 @@ function ProfitDateFilter({
   const [toDate, setToDate] = useState(value.toDate);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const filterPresence = useMotionPresence(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -222,18 +225,23 @@ function ProfitDateFilter({
         <span className="truncate">{profitFilterButtonLabel(value, t)}</span>
       </button>
 
-      {isOpen ? (
+      {filterPresence.present ? (
         <>
           <button
             aria-hidden="true"
-            className="fixed inset-0 z-40 bg-[rgba(0,21,60,0.18)] sm:hidden"
+            className={`motion-disclosure-backdrop fixed inset-0 z-40 bg-[rgba(0,21,60,0.18)] sm:hidden ${
+              filterPresence.visible ? "motion-disclosure-open" : ""
+            }`}
             onClick={() => setIsOpen(false)}
             tabIndex={-1}
             type="button"
           />
           <div
+            aria-hidden={!filterPresence.visible}
             aria-label={ariaLabel}
-            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[min(78dvh,34rem)] overflow-y-auto overscroll-contain border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.16)] sm:absolute sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:z-30 sm:mt-2 sm:max-h-[calc(100vh-8rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)]"
+            className={`motion-disclosure fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[min(78dvh,34rem)] overflow-y-auto overscroll-contain border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.16)] sm:absolute sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:z-30 sm:mt-2 sm:max-h-[calc(100vh-8rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] ${
+              filterPresence.visible ? "motion-disclosure-open" : ""
+            }`}
             id={filterId}
             role="dialog"
           >
@@ -446,7 +454,7 @@ export function OverviewDashboard({
   summaryFilter: ProfitDateFilterValue;
 }>) {
   const { t } = useLanguage();
-  const { data: dashboard } = trpc.dashboard.today.useQuery(
+  const { data: dashboard, isFetching } = trpc.dashboard.today.useQuery(
     {
       date,
       profitFromDate: profitFilter.fromDate,
@@ -487,7 +495,7 @@ export function OverviewDashboard({
     },
   ];
   return (
-    <div className="space-y-7">
+    <div aria-busy={isFetching} className="space-y-7">
       <section
         aria-labelledby="profit-heading"
         className="border border-[var(--hairline)] bg-white"
@@ -504,7 +512,11 @@ export function OverviewDashboard({
             value={profitFilter}
           />
         </div>
-        <div className="grid sm:grid-cols-2">
+        <div
+          className="motion-data-region motion-data-enter grid sm:grid-cols-2"
+          data-refreshing={isFetching}
+          key={`${profitFilter.fromDate}:${profitFilter.toDate}:${dashboard.profitForRange.thb}:${dashboard.profitForRange.mmk}`}
+        >
           <div className="border-b border-[var(--hairline)] p-6 sm:border-r sm:border-b-0 lg:p-8">
             <p className="text-xs font-semibold text-[var(--ink-muted)]">{t("profitThb")}</p>
             <p className="mt-4 font-[var(--font-display)] text-[clamp(2rem,5vw,3.5rem)] leading-none font-medium tracking-[-0.04em] tabular-nums text-[var(--ink)]">
@@ -536,7 +548,11 @@ export function OverviewDashboard({
             maximumDate={maximumDate}
           />
         </div>
-        <div className="grid sm:grid-cols-2">
+        <div
+          className="motion-data-region motion-data-enter grid sm:grid-cols-2"
+          data-refreshing={isFetching}
+          key={`${date}:${dashboard.closingBalance?.thb ?? ""}:${dashboard.closingBalance?.mmk ?? ""}`}
+        >
           <div className="border-b border-[var(--hairline)] px-5 py-5 sm:border-r sm:border-b-0 sm:px-6">
             <p className="text-xs font-semibold text-[var(--ink-muted)]">THB</p>
             <p className="mt-3 font-[var(--font-display)] text-[clamp(1.5rem,3vw,2rem)] leading-none font-medium tracking-[-0.025em] tabular-nums text-[var(--ink)]">
@@ -568,7 +584,11 @@ export function OverviewDashboard({
             value={summaryFilter}
           />
         </div>
-        <div className="grid sm:grid-cols-2 xl:grid-cols-5">
+        <div
+          className="motion-data-region motion-data-enter grid sm:grid-cols-2 xl:grid-cols-5"
+          data-refreshing={isFetching}
+          key={`${summaryFilter.fromDate}:${summaryFilter.toDate}:${metrics.map((metric) => metric.value).join(":")}`}
+        >
           {metrics.map((metric) => (
             <article
               className="min-h-[150px] border-b border-[var(--hairline)] bg-white p-5 last:border-b-0 sm:odd:border-r xl:border-r xl:border-b-0 xl:last:border-r-0"
@@ -627,6 +647,11 @@ export function OverviewDashboard({
                 <span className="pr-2 text-right">{t("profit")}</span>
                 <span className="pr-2 text-right">{t("action")}</span>
               </div>
+              <RecentTransactionHighlighter
+                refreshKey={dashboard.latestTransactions
+                  .map((transaction) => `${transaction.type}:${transaction.id}`)
+                  .join("|")}
+              />
               <div className="divide-y divide-[var(--hairline)]">
                 {dashboard.latestTransactions.map((transaction) => {
                   const amounts = transactionAmounts(transaction);
@@ -634,6 +659,7 @@ export function OverviewDashboard({
                   return (
                     <article
                       className={`grid ${latestTransactionsGrid} items-center px-5 py-4 text-sm`}
+                      data-transaction-key={`${transaction.type}:${transaction.id}`}
                       key={`${transaction.type}-${transaction.id}`}
                     >
                       <div className="tabular-nums">

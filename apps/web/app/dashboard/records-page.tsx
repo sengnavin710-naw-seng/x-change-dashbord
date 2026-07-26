@@ -9,6 +9,7 @@ import { getServerTranslator } from "@/lib/i18n-server";
 
 import { NewEntryDialog } from "./new-entry-dialog";
 import { SingleDateFilter } from "./single-date-filter";
+import { RecentTransactionHighlighter } from "./transaction-motion";
 
 type RecordType = "cash-bank" | "exchange" | "expense";
 type AppRouterCaller = ReturnType<typeof appRouter.createCaller>;
@@ -88,6 +89,9 @@ export async function RecordsPage({ searchParams, type }: Readonly<RecordsPagePr
       </header>
 
       <section className="border border-[var(--hairline)] bg-white">
+        <RecentTransactionHighlighter
+          refreshKey={records.map((record) => `${record.type}:${record.id}`).join("|")}
+        />
         {records.length === 0 ? (
           <div className="px-5 py-14 text-center sm:px-6">
             <p className="font-semibold text-[var(--ink)]">{t("noRecordsDate")}</p>
@@ -174,6 +178,7 @@ function ExchangeHistory({ records, t }: Readonly<{ records: ExchangeRecord[]; t
             return (
               <article
                 className={`grid ${exchangeHistoryGrid} items-center px-4 py-4 text-[13px]`}
+                data-transaction-key={`exchange:${record.id}`}
                 key={record.id}
               >
                 <CompactDateTime value={record.transactionAt} />
@@ -229,6 +234,7 @@ function CashBankHistory({ records, t }: Readonly<{ records: CashBankRecord[]; t
           {records.map((record) => (
             <article
               className={`grid ${cashBankHistoryGrid} items-center px-4 py-4 text-[13px]`}
+              data-transaction-key={`cash-bank:${record.id}`}
               key={record.id}
             >
               <CompactDateTime value={record.transactionAt} />
@@ -277,7 +283,11 @@ function ExpenseHistory({ records, t }: Readonly<{ records: ExpenseRecord[]; t: 
         </div>
         <div className="divide-y divide-[var(--hairline)]">
           {records.map((record) => (
-            <article className={`grid ${expenseHistoryGrid} text-sm`} key={record.id}>
+            <article
+              className={`grid ${expenseHistoryGrid} text-sm`}
+              data-transaction-key={`expense:${record.id}`}
+              key={record.id}
+            >
               <div className="flex items-center px-5 py-4">
                 <CompactDateTime value={record.transactionAt} />
               </div>

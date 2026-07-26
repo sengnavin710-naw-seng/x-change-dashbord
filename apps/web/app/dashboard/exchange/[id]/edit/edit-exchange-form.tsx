@@ -18,7 +18,8 @@ import {
 } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
 
-import { DateTimeInput, FormSelect } from "../../../form-controls";
+import { DateTimeInput, FormSelect, LoadingSpinner } from "../../../form-controls";
+import { rememberRecentTransaction } from "../../../transaction-motion";
 import { useLanguage } from "../../../../language-provider";
 
 type ExchangeRecord = inferRouterOutputs<AppRouter>["operations"]["getExchange"];
@@ -94,6 +95,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
         transactionAt,
       });
       await utils.dashboard.today.invalidate();
+      rememberRecentTransaction({ id: record.id, type: "exchange" });
       router.push("/dashboard/exchange");
       router.refresh();
     } catch (cause) {
@@ -251,7 +253,14 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           {t("cancel")}
         </Button>
         <Button disabled={mutation.isPending || !calculation} type="submit">
-          {mutation.isPending ? t("updating") : t("updateRecord")}
+          {mutation.isPending ? (
+            <>
+              <LoadingSpinner className="mr-2" />
+              {t("updating")}
+            </>
+          ) : (
+            t("updateRecord")
+          )}
         </Button>
       </div>
     </form>

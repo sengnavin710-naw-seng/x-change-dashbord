@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState, useTransition } from "react";
 
 import { useLanguage } from "../language-provider";
+import { useMotionPresence } from "../use-motion-presence";
 
 const filterButtonClass =
   "inline-flex h-11 max-w-[10rem] items-center justify-center gap-2 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--ink-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-wait disabled:opacity-60 sm:h-9 sm:max-w-none";
@@ -52,6 +53,7 @@ export function SingleDateFilter({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(date);
   const [isPending, startTransition] = useTransition();
+  const filterPresence = useMotionPresence(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -120,18 +122,23 @@ export function SingleDateFilter({
         </span>
       </button>
 
-      {isOpen ? (
+      {filterPresence.present ? (
         <>
           <button
             aria-hidden="true"
-            className="fixed inset-0 z-40 bg-[rgba(0,21,60,0.18)] sm:hidden"
+            className={`motion-disclosure-backdrop fixed inset-0 z-40 bg-[rgba(0,21,60,0.18)] sm:hidden ${
+              filterPresence.visible ? "motion-disclosure-open" : ""
+            }`}
             onClick={() => setIsOpen(false)}
             tabIndex={-1}
             type="button"
           />
           <div
+            aria-hidden={!filterPresence.visible}
             aria-label={ariaLabel}
-            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[min(78dvh,24rem)] overflow-y-auto overscroll-contain border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.16)] sm:absolute sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:z-30 sm:mt-2 sm:w-[280px] sm:max-w-[calc(100vw-2rem)]"
+            className={`motion-disclosure fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[min(78dvh,24rem)] overflow-y-auto overscroll-contain border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.16)] sm:absolute sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:z-30 sm:mt-2 sm:w-[280px] sm:max-w-[calc(100vw-2rem)] ${
+              filterPresence.visible ? "motion-disclosure-open" : ""
+            }`}
             id={filterId}
             role="dialog"
           >

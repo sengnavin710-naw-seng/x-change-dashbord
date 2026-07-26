@@ -20,7 +20,8 @@ import {
 import { trpc } from "@/trpc/client";
 
 import { useLanguage } from "../../language-provider";
-import { DateTimeInput, FormSelect } from "../form-controls";
+import { DateTimeInput, FormSelect, LoadingSpinner } from "../form-controls";
+import type { RecentTransaction } from "../transaction-motion";
 
 type EntryType = "cash-bank" | "exchange" | "expense";
 type Direction = "mmk-to-thb" | "thb-to-mmk";
@@ -56,7 +57,7 @@ export function EntryForm({
   embedded?: boolean;
   initialEntryType?: EntryType;
   onPendingChange?: (pending: boolean) => void;
-  onSaved?: () => void;
+  onSaved?: (transaction: RecentTransaction) => void;
   showTypeSelector?: boolean;
 }>) {
   const router = useRouter();
@@ -137,6 +138,8 @@ export function EntryForm({
     setSuccess(null);
 
     try {
+      let savedTransaction: RecentTransaction;
+
       if (entryType === "exchange") {
         if (!selectedRate || !transactionAt)
           throw new Error("No active exchange rate is available.");
@@ -155,6 +158,7 @@ export function EntryForm({
         setSuccess(
           `Saved · Profit ${result.formulaProfitThb} THB · Actual settlement ${result.actualSettlementProfitThb} THB`,
         );
+        savedTransaction = { id: result.id, type: "exchange" };
         resetExchangeState();
       } else if (entryType === "cash-bank") {
         const result = await createCashBank.mutateAsync({
@@ -166,6 +170,7 @@ export function EntryForm({
           transactionAt,
         });
         setSuccess(`Saved · Profit ${result.feeAmount} ${result.currency}`);
+        savedTransaction = { id: result.id, type: "cash-bank" };
         formElement.reset();
         setCashCurrency("MMK");
       } else {
@@ -176,11 +181,12 @@ export function EntryForm({
           transactionAt,
         });
         setSuccess(`Saved · ${result.amount} ${result.currency}`);
+        savedTransaction = { id: result.id, type: "expense" };
         formElement.reset();
       }
       await utils.dashboard.today.invalidate();
       router.refresh();
-      onSaved?.();
+      onSaved?.(savedTransaction);
     } catch (cause) {
       if (
         entryType === "exchange" &&
@@ -588,7 +594,14 @@ export function EntryForm({
             }
             type="submit"
           >
-            {isPending ? t("saving") : t("saveEntry")}
+            {isPending ? (
+              <>
+                <LoadingSpinner className="mr-2" />
+                {t("saving")}
+              </>
+            ) : (
+              t("saveEntry")
+            )}
           </Button>
         </div>
       </form>
