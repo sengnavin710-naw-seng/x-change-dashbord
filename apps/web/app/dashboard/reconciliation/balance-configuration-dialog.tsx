@@ -5,15 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@repo/ui/button";
 
 import { BalanceConfigurationForm, type BalanceConfiguration } from "./opening-form";
+import { useLanguage } from "../../language-provider";
 
 export function BalanceConfigurationDialog({
   defaultCheckpointDate,
   initial,
 }: Readonly<{
   defaultCheckpointDate: string;
-  initial: BalanceConfiguration;
+  initial: BalanceConfiguration | null;
 }>) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
@@ -39,11 +41,11 @@ export function BalanceConfigurationDialog({
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)}>Edit Balance</Button>
+      <Button onClick={() => setIsOpen(true)}>{t("setUpBalance")}</Button>
       <dialog
         aria-labelledby="edit-balance-title"
         aria-modal="true"
-        className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[680px] sm:border sm:border-[var(--hairline)]"
+        className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-[var(--ink-slate)] backdrop:bg-[#00153c]/55 sm:m-auto sm:h-auto sm:max-h-[calc(100dvh_-_3rem)] sm:w-[calc(100vw_-_3rem)] sm:max-w-[900px] sm:border sm:border-[var(--hairline)]"
         onCancel={(event) => {
           event.preventDefault();
           close();
@@ -58,21 +60,21 @@ export function BalanceConfigurationDialog({
           <header className="flex shrink-0 items-center justify-between gap-5 border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-4 sm:px-7">
             <div>
               <p className="text-[10px] font-semibold tracking-[0.1em] text-[var(--primary)] uppercase">
-                Opening / Closing Balance
+                {t("balanceSetup")}
               </p>
               <h2
                 className="mt-1 font-[var(--font-display)] text-xl font-medium text-[var(--ink)]"
                 id="edit-balance-title"
               >
-                Edit Balance Setup
+                {t("setUpBalance")}
               </h2>
             </div>
             <button
-              aria-label="Close balance setup"
+              aria-label={`${t("close")} ${t("balanceSetup")}`}
               className="grid size-10 shrink-0 place-items-center rounded-none border border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isPending}
               onClick={close}
-              title="Close"
+              title={t("close")}
               type="button"
             >
               <svg
@@ -88,7 +90,7 @@ export function BalanceConfigurationDialog({
               </svg>
             </button>
           </header>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {isOpen ? (
               <BalanceConfigurationForm
                 defaultCheckpointDate={defaultCheckpointDate}

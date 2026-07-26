@@ -4,9 +4,9 @@ import { headers } from "next/headers";
 import { appRouter, createTRPCContext } from "@repo/api";
 
 import { BalanceConfigurationDialog } from "./balance-configuration-dialog";
-import { BalanceConfigurationForm } from "./opening-form";
+import { getServerTranslator } from "../../../lib/i18n-server";
 
-export const metadata: Metadata = { title: "Opening / Closing Balance" };
+export const metadata: Metadata = { title: "Balance Setup" };
 
 function todayInYangon() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -33,6 +33,7 @@ function formatMoney(value: string, currency: "MMK" | "THB") {
 }
 
 export default async function BalancePage() {
+  const { t } = await getServerTranslator();
   const caller = appRouter.createCaller(await createTRPCContext({ headers: await headers() }));
   const today = todayInYangon();
   const dashboard = await caller.dashboard.today({ date: today });
@@ -43,114 +44,62 @@ export default async function BalancePage() {
       <header className="flex flex-col gap-5 border-b border-[var(--hairline)] pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-            Opening / Closing Balance
+            {t("balanceSetup")}
           </h1>
-          <p className="mt-2 text-sm text-[var(--ink-muted)]">{today} · Today</p>
         </div>
-        {configuration ? (
-          <BalanceConfigurationDialog
-            defaultCheckpointDate={configuration.checkpointDate}
-            initial={configuration}
-          />
-        ) : null}
+        <BalanceConfigurationDialog
+          defaultCheckpointDate={configuration?.checkpointDate ?? previousCalendarDate(today)}
+          initial={configuration}
+        />
       </header>
 
-      {configuration && dashboard.closingBalance ? (
-        <>
-          <section className="border border-[var(--hairline)] bg-white">
-            <div className="flex items-center justify-between gap-5 border-b border-[var(--hairline)] px-5 py-4 sm:px-6">
-              <h2 className="font-semibold text-[var(--ink)]">Current Closing Balance</h2>
-              <span className="text-[10px] font-semibold tracking-[0.08em] text-[var(--ink-muted)] uppercase">
-                {today}
-              </span>
-            </div>
-            <div className="grid sm:grid-cols-2">
-              <BalanceAmount
-                currency="THB"
-                value={formatMoney(dashboard.closingBalance.thb, "THB")}
-              />
-              <BalanceAmount
-                currency="MMK"
-                right
-                value={formatMoney(dashboard.closingBalance.mmk, "MMK")}
-              />
-            </div>
-          </section>
-
-          <section className="border border-[var(--hairline)] bg-white">
-            <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-6">
-              <h2 className="font-semibold text-[var(--ink)]">Balance Reference</h2>
-            </div>
-            <div className="hidden grid-cols-[minmax(0,1fr)_150px_180px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.08em] text-[var(--ink-muted)] uppercase sm:grid sm:px-6">
-              <span>Balance</span>
-              <span className="text-right">THB</span>
-              <span className="text-right">MMK</span>
-            </div>
-            <BalanceReferenceRow
-              label="Opening Balance"
-              mmk={formatMoney(configuration.openingMmk, "MMK")}
-              thb={formatMoney(configuration.openingThb, "THB")}
-            />
-            <BalanceReferenceRow
-              date={configuration.checkpointDate}
-              label="Previous Closing Balance"
-              mmk={formatMoney(configuration.checkpointMmk, "MMK")}
-              thb={formatMoney(configuration.checkpointThb, "THB")}
-            />
-          </section>
-        </>
-      ) : (
-        <>
-          <section className="border-l-4 border-[var(--warning)] bg-[#fff8df] px-5 py-4">
-            <p className="font-semibold text-[var(--ink)]">Balance setup is not configured</p>
-          </section>
-          <BalanceConfigurationForm
-            defaultCheckpointDate={previousCalendarDate(today)}
-            initial={null}
-          />
-        </>
-      )}
+      <section className="grid gap-5 lg:grid-cols-2">
+        <ReferenceBalanceCard
+          label={t("openingBalance")}
+          mmk={configuration ? formatMoney(configuration.openingMmk, "MMK") : "—"}
+          thb={configuration ? formatMoney(configuration.openingThb, "THB") : "—"}
+        />
+        <ReferenceBalanceCard
+          {...(configuration ? { date: configuration.checkpointDate } : {})}
+          label={t("currencyExchangeBalance")}
+          mmk={configuration ? formatMoney(configuration.checkpointMmk, "MMK") : "—"}
+          thb={configuration ? formatMoney(configuration.checkpointThb, "THB") : "—"}
+        />
+      </section>
     </div>
   );
 }
 
-function BalanceAmount({
-  currency,
-  right = false,
-  value,
-}: Readonly<{ currency: "MMK" | "THB"; right?: boolean; value: string }>) {
-  return (
-    <div
-      className={`p-6 lg:p-8 ${right ? "border-t border-[var(--hairline)] sm:border-t-0 sm:border-l" : ""}`}
-    >
-      <p className="text-xs font-semibold text-[var(--ink-muted)]">{currency}</p>
-      <p className="mt-4 font-[var(--font-display)] text-[clamp(2rem,5vw,3.5rem)] leading-none font-medium tracking-[-0.04em] tabular-nums text-[var(--ink)]">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function BalanceReferenceRow({
+function ReferenceBalanceCard({
   date,
   label,
   mmk,
   thb,
 }: Readonly<{ date?: string; label: string; mmk: string; thb: string }>) {
   return (
-    <div className="grid gap-4 border-b border-[var(--hairline)] px-5 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px_180px] sm:items-center sm:px-6">
-      <div>
-        <p className="text-sm font-semibold text-[var(--ink)]">{label}</p>
-        {date ? <p className="mt-1 text-[10px] text-[var(--ink-muted)]">{date}</p> : null}
+    <article className="border border-[var(--hairline)] bg-white">
+      <header className="flex min-h-16 items-center justify-between gap-4 border-b border-[var(--hairline)] px-5 py-4 sm:px-6">
+        <h2 className="font-semibold text-[var(--ink)]">{label}</h2>
+        {date ? (
+          <p className="shrink-0 text-[10px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase">
+            {date}
+          </p>
+        ) : null}
+      </header>
+      <div className="grid sm:grid-cols-2">
+        <div className="min-w-0 px-5 py-6 sm:px-6">
+          <p className="text-xs font-semibold text-[var(--ink-muted)]">THB</p>
+          <p className="mt-3 overflow-hidden text-[clamp(1.45rem,3vw,2.25rem)] leading-none font-medium tracking-[-0.03em] text-ellipsis tabular-nums text-[var(--ink)]">
+            {thb}
+          </p>
+        </div>
+        <div className="min-w-0 border-t border-[var(--hairline)] px-5 py-6 sm:border-t-0 sm:border-l sm:px-6">
+          <p className="text-xs font-semibold text-[var(--ink-muted)]">MMK</p>
+          <p className="mt-3 overflow-hidden text-[clamp(1.45rem,3vw,2.25rem)] leading-none font-medium tracking-[-0.03em] text-ellipsis tabular-nums text-[var(--ink)]">
+            {mmk}
+          </p>
+        </div>
       </div>
-      <p className="text-sm font-semibold tabular-nums text-[var(--ink)] sm:text-right">
-        <span className="mr-2 text-[10px] text-[var(--ink-muted)] sm:hidden">THB</span>
-        {thb}
-      </p>
-      <p className="text-sm font-semibold tabular-nums text-[var(--ink)] sm:text-right">
-        <span className="mr-2 text-[10px] text-[var(--ink-muted)] sm:hidden">MMK</span>
-        {mmk}
-      </p>
-    </div>
+    </article>
   );
 }

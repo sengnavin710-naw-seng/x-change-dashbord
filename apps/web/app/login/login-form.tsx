@@ -8,10 +8,13 @@ import { Input } from "@repo/ui/input";
 
 import { authClient } from "@/lib/auth-client";
 
+import { useLanguage } from "../language-provider";
+
 type FormStatus = "idle" | "loading" | "success";
 
 export function LoginForm() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +34,7 @@ export function LoginForm() {
     });
 
     if (result.error) {
-      setError("The email or password is incorrect, or this account is not active.");
+      setError(t("incorrectLogin"));
       setStatus("idle");
       return;
     }
@@ -42,12 +45,13 @@ export function LoginForm() {
   }
 
   const isSubmitting = status !== "idle";
+  const feedbackId = error || status === "success" ? "login-feedback" : undefined;
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <label className="block text-sm font-medium text-[var(--ink-slate)]" htmlFor="email">
-          Work email
+          {t("email")}
         </label>
         <Input
           autoComplete="email"
@@ -56,7 +60,7 @@ export function LoginForm() {
           inputMode="email"
           name="email"
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@company.com"
+          placeholder={t("emailPlaceholder")}
           required
           type="email"
           value={email}
@@ -64,59 +68,92 @@ export function LoginForm() {
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-4">
-          <label className="block text-sm font-medium text-[var(--ink-slate)]" htmlFor="password">
-            Password
-          </label>
+        <label className="block text-sm font-medium text-[var(--ink-slate)]" htmlFor="password">
+          {t("password")}
+        </label>
+        <div className="relative">
+          <Input
+            aria-describedby={feedbackId}
+            autoComplete="current-password"
+            className="pr-12"
+            disabled={isSubmitting}
+            id="password"
+            minLength={12}
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder={t("passwordPlaceholder")}
+            required
+            type={showPassword ? "text" : "password"}
+            value={password}
+          />
           <button
-            className="rounded-[4px] text-xs font-semibold text-[var(--primary)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2"
+            aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+            aria-pressed={showPassword}
+            className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-[4px] text-[var(--ink-muted)] outline-none transition-colors hover:text-[var(--ink)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isSubmitting}
             onClick={() => setShowPassword((visible) => !visible)}
+            title={showPassword ? t("hidePassword") : t("showPassword")}
             type="button"
           >
-            {showPassword ? "Hide" : "Show"}
+            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
           </button>
         </div>
-        <Input
-          aria-describedby={error ? "login-error" : undefined}
-          autoComplete="current-password"
-          disabled={isSubmitting}
-          id="password"
-          minLength={12}
-          name="password"
-          onChange={(event) => setPassword(event.target.value)}
-          required
-          type={showPassword ? "text" : "password"}
-          value={password}
-        />
+        {error ? (
+          <p className="text-xs text-[var(--error)]" id="login-feedback" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {status === "success" ? (
+          <p className="text-xs text-[var(--success)]" id="login-feedback" role="status">
+            {t("signedIn")}
+          </p>
+        ) : null}
       </div>
 
-      {error ? (
-        <div
-          className="border-l-4 border-[var(--error)] bg-[var(--error-bg)] px-4 py-3 text-sm leading-5 text-[var(--ink-slate)]"
-          id="login-error"
-          role="alert"
-        >
-          {error}
-        </div>
-      ) : null}
-
-      {status === "success" ? (
-        <div
-          className="border-l-4 border-[var(--success)] bg-[#e8f8f0] px-4 py-3 text-sm text-[var(--ink-slate)]"
-          role="status"
-        >
-          Access granted. Opening your workspace…
-        </div>
-      ) : null}
-
-      <Button className="w-full" disabled={isSubmitting} type="submit">
-        {status === "loading"
-          ? "Verifying account…"
-          : status === "success"
-            ? "Access granted"
-            : "Continue"}
+      <Button className="mt-2 w-full" disabled={isSubmitting} type="submit">
+        {status === "loading" ? t("signingIn") : status === "success" ? t("signedIn") : t("signIn")}
       </Button>
     </form>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="m3 3 18 18M10.6 6.2A10.5 10.5 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.8M6.2 6.2C3.8 7.8 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8M9.9 9.9a3 3 0 0 0 4.2 4.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
   );
 }

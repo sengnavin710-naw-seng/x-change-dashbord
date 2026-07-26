@@ -5,6 +5,8 @@ import { headers } from "next/headers";
 import { appRouter, createTRPCContext } from "@repo/api";
 
 import { TransactionFilters, type TransactionRange } from "./transaction-filters";
+import { getServerTranslator } from "../../../lib/i18n-server";
+import type { MessageKey } from "../../../lib/i18n";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "All Transactions" };
@@ -14,8 +16,7 @@ type Currency = "MMK" | "THB";
 type Order = "newest" | "oldest";
 type SearchParams = Record<string, string | string[] | undefined>;
 
-const transactionGridColumns =
-  "132px 96px 110px minmax(130px,1fr) minmax(104px,0.8fr) minmax(104px,0.8fr) 108px 54px";
+const transactionHistoryGrid = "grid-cols-[150px_130px_160px_190px_190px_140px_90px]";
 
 function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -83,15 +84,21 @@ function formatDateTime(value: string) {
   };
 }
 
-function labelForType(type: TransactionType) {
-  if (type === "exchange") return "Exchange";
-  if (type === "cash-bank") return "Cash ↔ Bank";
-  return "Expenses";
+function labelForType(type: TransactionType, t: (key: MessageKey) => string) {
+  if (type === "exchange") return t("exchange");
+  if (type === "cash-bank") return t("cashBank");
+  return t("expenses");
 }
 
-function labelForDirection(type: TransactionType, direction: string | null) {
+function labelForDirection(
+  type: TransactionType,
+  direction: string | null,
+  t: (key: MessageKey) => string,
+) {
   if (type === "exchange") return direction === "thb-to-mmk" ? "THB → MMK" : "MMK → THB";
-  if (type === "cash-bank") return direction === "bank-to-cash" ? "Bank → Cash" : "Cash → Bank";
+  if (type === "cash-bank") {
+    return direction === "bank-to-cash" ? t("bankInCashOut") : t("cashInBankOut");
+  }
   return "—";
 }
 
@@ -121,6 +128,7 @@ export default async function AllTransactionsPage({
   searchParams,
 }: Readonly<{ searchParams: Promise<SearchParams> }>) {
   const values = await searchParams;
+  const { t } = await getServerTranslator();
   const today = todayInYangon();
   const requestedRange = scalar(values.range);
   const parsedRange: TransactionRange =
@@ -196,10 +204,10 @@ export default async function AllTransactionsPage({
     <div className="space-y-6">
       <header className="flex items-end justify-between gap-4 border-b border-[var(--hairline)] pb-6">
         <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          All Transactions
+          {t("allTransactions")}
         </h1>
         <p className="pb-1 text-xs font-semibold text-[var(--ink-muted)]">
-          {result.total} {result.total === 1 ? "Transaction" : "Transactions"}
+          {result.total} {t(result.total === 1 ? "transaction" : "transactions")}
         </p>
       </header>
 
@@ -213,137 +221,77 @@ export default async function AllTransactionsPage({
         {...(type ? { type } : {})}
       />
 
-      <section className="border border-[var(--hairline)] bg-white" aria-label="Transactions">
+      <section className="border border-[var(--hairline)] bg-white" aria-label={t("transactions")}>
         {result.items.length === 0 ? (
           <div className="px-5 py-16 text-center sm:px-6">
-            <p className="font-semibold text-[var(--ink)]">No transactions found</p>
-            <p className="mt-2 text-xs text-[var(--ink-muted)]">
-              Try another date range or filter.
-            </p>
+            <p className="font-semibold text-[var(--ink)]">{t("noTransactions")}</p>
+            <p className="mt-2 text-xs text-[var(--ink-muted)]">{t("tryAnotherFilter")}</p>
           </div>
         ) : (
-          <>
-            <div
-              className="hidden items-center border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase xl:grid"
-              style={{ gridTemplateColumns: transactionGridColumns }}
-            >
-              <span>Date / Time</span>
-              <span>Type</span>
-              <span>Direction</span>
-              <span>Description / Particular</span>
-              <span className="text-right">IN</span>
-              <span className="text-right">OUT</span>
-              <span className="text-right">Profit</span>
-              <span className="text-right">Action</span>
-            </div>
-            <div className="hidden divide-y divide-[var(--hairline)] xl:block">
-              {result.items.map((item) => {
-                const dateTime = formatDateTime(item.transactionAt);
-                return (
-                  <article
-                    className="grid items-center px-5 py-4 text-sm"
-                    key={`${item.type}-${item.id}`}
-                    style={{ gridTemplateColumns: transactionGridColumns }}
-                  >
-                    <div className="tabular-nums">
-                      <p className="font-semibold text-[var(--ink)]">{dateTime.date}</p>
-                      <p className="mt-1 text-xs text-[var(--ink-muted)]">{dateTime.time}</p>
-                    </div>
-                    <p className="font-semibold text-[var(--ink)]">{labelForType(item.type)}</p>
-                    <p className="pr-4 font-medium text-[var(--ink-secondary)]">
-                      {labelForDirection(item.type, item.direction)}
-                    </p>
-                    <p
-                      className="min-w-0 truncate pr-4 text-[var(--ink-secondary)]"
-                      title={item.description || "-"}
+          <div
+            aria-label={t("allTransactions")}
+            className="w-full overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)]"
+            tabIndex={0}
+          >
+            <div className="min-w-[1090px]">
+              <div
+                className={`grid ${transactionHistoryGrid} items-center border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.06em] whitespace-nowrap text-[var(--ink-muted)] uppercase`}
+              >
+                <span>{t("dateTime")}</span>
+                <span>{t("type")}</span>
+                <span>{t("direction")}</span>
+                <span className="pr-2 text-right">{t("in")}</span>
+                <span className="pr-2 text-right">{t("out")}</span>
+                <span className="pr-2 text-right">{t("profit")}</span>
+                <span className="pr-2 text-right">{t("action")}</span>
+              </div>
+              <div className="divide-y divide-[var(--hairline)]">
+                {result.items.map((item) => {
+                  const dateTime = formatDateTime(item.transactionAt);
+                  return (
+                    <article
+                      className={`grid ${transactionHistoryGrid} items-center px-5 py-4 text-sm`}
+                      key={`${item.type}-${item.id}`}
                     >
-                      {item.description || "-"}
-                    </p>
-                    <p className="text-right font-semibold tabular-nums text-[var(--ink)]">
-                      {formatMovement(item.inAmount, item.inCurrency, item.inChannel)}
-                    </p>
-                    <p className="text-right font-semibold tabular-nums text-[var(--ink)]">
-                      {formatMovement(item.outAmount, item.outCurrency, item.outChannel)}
-                    </p>
-                    <p className="text-right font-semibold tabular-nums text-[var(--ink-secondary)]">
-                      {item.profitAmount && item.profitCurrency
-                        ? `${formatMoney(item.profitAmount, item.profitCurrency)} ${item.profitCurrency}`
-                        : "—"}
-                    </p>
-                    <Link
-                      className="justify-self-end text-xs font-semibold text-[var(--primary-dark)] underline underline-offset-4"
-                      href={editHref(item.type, item.id)}
-                    >
-                      Edit
-                    </Link>
-                  </article>
-                );
-              })}
-            </div>
-            <div className="divide-y divide-[var(--hairline)] xl:hidden">
-              {result.items.map((item) => {
-                const dateTime = formatDateTime(item.transactionAt);
-                return (
-                  <article className="p-5" key={`${item.type}-${item.id}`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-[var(--ink)]">{labelForType(item.type)}</p>
-                        <p className="mt-1 text-xs tabular-nums text-[var(--ink-muted)]">
-                          {dateTime.date} · {dateTime.time}
-                        </p>
+                      <div className="tabular-nums">
+                        <p className="font-semibold text-[var(--ink)]">{dateTime.date}</p>
+                        <p className="mt-1 text-xs text-[var(--ink-muted)]">{dateTime.time}</p>
                       </div>
+                      <p className="font-semibold text-[var(--ink)]">
+                        {labelForType(item.type, t)}
+                      </p>
+                      <p className="pr-4 font-medium text-[var(--ink-secondary)]">
+                        {labelForDirection(item.type, item.direction, t)}
+                      </p>
+                      <p className="pr-2 text-right font-semibold tabular-nums text-[var(--ink)]">
+                        {formatMovement(item.inAmount, item.inCurrency, item.inChannel)}
+                      </p>
+                      <p className="pr-2 text-right font-semibold tabular-nums text-[var(--ink)]">
+                        {formatMovement(item.outAmount, item.outCurrency, item.outChannel)}
+                      </p>
+                      <p className="pr-2 text-right font-semibold tabular-nums text-[var(--ink-secondary)]">
+                        {item.profitAmount && item.profitCurrency
+                          ? `${formatMoney(item.profitAmount, item.profitCurrency)} ${item.profitCurrency}`
+                          : "—"}
+                      </p>
                       <Link
-                        className="text-xs font-semibold text-[var(--primary-dark)] underline underline-offset-4"
+                        className="justify-self-end pr-2 text-xs font-semibold text-[var(--primary-dark)] underline underline-offset-4"
                         href={editHref(item.type, item.id)}
                       >
-                        Edit
+                        {t("edit")}
                       </Link>
-                    </div>
-                    <p className="mt-4 text-sm text-[var(--ink-secondary)]">
-                      {item.description || "-"}
-                    </p>
-                    <p className="mt-2 text-xs font-medium text-[var(--ink-muted)]">
-                      {labelForDirection(item.type, item.direction)}
-                    </p>
-                    <div className="mt-5 grid grid-cols-2 border border-[var(--hairline)] bg-[var(--hairline)] gap-px">
-                      <div className="bg-white p-3">
-                        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                          IN
-                        </p>
-                        <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">
-                          {formatMovement(item.inAmount, item.inCurrency, item.inChannel)}
-                        </p>
-                      </div>
-                      <div className="bg-white p-3">
-                        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                          OUT
-                        </p>
-                        <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">
-                          {formatMovement(item.outAmount, item.outCurrency, item.outChannel)}
-                        </p>
-                      </div>
-                      <div className="col-span-2 bg-white p-3">
-                        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase">
-                          Profit
-                        </p>
-                        <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">
-                          {item.profitAmount && item.profitCurrency
-                            ? `${formatMoney(item.profitAmount, item.profitCurrency)} ${item.profitCurrency}`
-                            : "—"}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
-          </>
+          </div>
         )}
       </section>
 
       <footer className="flex flex-col gap-3 border-t border-[var(--hairline)] pt-5 text-xs text-[var(--ink-muted)] sm:flex-row sm:items-center sm:justify-between">
         <p>
-          Page {result.page} of {result.totalPages} · {result.total} entries
+          {t("page")} {result.page} {t("of")} {result.totalPages} · {result.total} {t("records")}
         </p>
         <div className="flex gap-2">
           {result.page > 1 ? (
@@ -351,7 +299,7 @@ export default async function AllTransactionsPage({
               className="rounded-[4px] border border-[var(--hairline-soft)] bg-white px-3 py-2 font-semibold text-[var(--ink-secondary)]"
               href={pageHref(query, result.page - 1)}
             >
-              Previous
+              {t("previous")}
             </Link>
           ) : null}
           {result.page < result.totalPages ? (
@@ -359,7 +307,7 @@ export default async function AllTransactionsPage({
               className="rounded-[4px] border border-[var(--hairline-soft)] bg-white px-3 py-2 font-semibold text-[var(--ink-secondary)]"
               href={pageHref(query, result.page + 1)}
             >
-              Next
+              {t("next")}
             </Link>
           ) : null}
         </div>

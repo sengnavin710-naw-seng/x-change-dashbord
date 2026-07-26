@@ -67,6 +67,16 @@ bun dev
 
 Open <http://localhost:3000>.
 
+To open the development site from another device on the same LAN, add each exact
+browser origin to `.env`, separated by commas, and restart `bun dev`:
+
+```env
+BETTER_AUTH_TRUSTED_ORIGINS=http://192.168.1.100:3000
+```
+
+Use the computer's current LAN IP in place of `192.168.1.100`. Origins not listed here
+remain blocked by Better Auth.
+
 ## Quality checks
 
 ```sh
@@ -92,8 +102,8 @@ are Burmese with English support labels. Current modules are:
 - Reference and operational opening balances, kept unreconciled until external evidence exists.
 - Retrospective exchange corrections with a required reason and preserved revision history.
 
-Legacy Excel columns H, I, and the yellow Summary band are intentionally excluded until
-their business meaning is confirmed. No sample business records are inserted.
+Unrelated legacy Excel helper columns are not part of the application data model. No
+sample business records are inserted into the development database.
 
 ## Provisioned account operations
 

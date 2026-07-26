@@ -3,8 +3,10 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState, useTransition } from "react";
 
+import { useLanguage } from "../language-provider";
+
 const filterButtonClass =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--ink-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-wait disabled:opacity-60";
+  "inline-flex h-11 max-w-[10rem] items-center justify-center gap-2 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--ink-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-wait disabled:opacity-60 sm:h-9 sm:max-w-none";
 
 function CalendarIcon() {
   return (
@@ -19,17 +21,29 @@ function CalendarIcon() {
   );
 }
 
+function formatSelectedDate(date: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric",
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
 export function SingleDateFilter({
   ariaLabel,
   date,
+  displaySelectedDate = false,
   filterId,
   maximumDate,
 }: Readonly<{
   ariaLabel: string;
   date: string;
+  displaySelectedDate?: boolean;
   filterId: string;
   maximumDate: string;
 }>) {
+  const { t } = useLanguage();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -101,40 +115,64 @@ export function SingleDateFilter({
         type="button"
       >
         <CalendarIcon />
-        Filter Date
+        <span className="truncate">
+          {displaySelectedDate ? formatSelectedDate(date) : t("filterDate")}
+        </span>
       </button>
 
       {isOpen ? (
-        <div
-          aria-label={ariaLabel}
-          className="absolute top-full right-0 z-30 mt-2 w-[280px] max-w-[calc(100vw-2rem)] border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.12)]"
-          id={filterId}
-          role="dialog"
-        >
-          <div className="border-b border-[var(--hairline)] px-4 py-3">
-            <p className="text-sm font-semibold text-[var(--ink)]">Date Filter</p>
+        <>
+          <button
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-[rgba(0,21,60,0.18)] sm:hidden"
+            onClick={() => setIsOpen(false)}
+            tabIndex={-1}
+            type="button"
+          />
+          <div
+            aria-label={ariaLabel}
+            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[min(78dvh,24rem)] overflow-y-auto overscroll-contain border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.16)] sm:absolute sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:z-30 sm:mt-2 sm:w-[280px] sm:max-w-[calc(100vw-2rem)]"
+            id={filterId}
+            role="dialog"
+          >
+            <div className="flex min-h-11 items-center justify-between border-b border-[var(--hairline)] px-3 py-2 sm:px-4 sm:py-3">
+              <p className="text-sm font-semibold text-[var(--ink)]">{t("dateFilter")}</p>
+              <button
+                aria-label={t("close")}
+                className="inline-flex size-10 items-center justify-center border border-[var(--hairline-soft)] bg-white text-xl leading-none text-[var(--ink-secondary)] hover:border-[var(--ink-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] sm:hidden"
+                onClick={() => {
+                  setIsOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <form className="space-y-3 p-3 sm:space-y-4 sm:p-4" onSubmit={applyDate}>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-semibold text-[var(--ink-secondary)]">
+                  {t("date")}
+                </span>
+                <input
+                  className="h-11 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-sm tabular-nums text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2] sm:h-10"
+                  max={maximumDate}
+                  onChange={(event) => setSelectedDate(event.target.value)}
+                  required
+                  type="date"
+                  value={selectedDate}
+                />
+              </label>
+              <button
+                className="h-11 w-full rounded-none border border-[var(--primary-dark)] bg-[var(--primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 sm:h-10"
+                disabled={isPending}
+                type="submit"
+              >
+                {t("apply")}
+              </button>
+            </form>
           </div>
-          <form className="space-y-4 p-4" onSubmit={applyDate}>
-            <label className="grid gap-1.5">
-              <span className="text-xs font-semibold text-[var(--ink-secondary)]">Date</span>
-              <input
-                className="h-10 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-sm tabular-nums text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2]"
-                max={maximumDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-                required
-                type="date"
-                value={selectedDate}
-              />
-            </label>
-            <button
-              className="h-10 w-full rounded-none border border-[var(--primary-dark)] bg-[var(--primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-              disabled={isPending}
-              type="submit"
-            >
-              Apply
-            </button>
-          </form>
-        </div>
+        </>
       ) : null}
     </div>
   );

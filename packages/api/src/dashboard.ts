@@ -19,6 +19,8 @@ const dashboardInputSchema = z
     date: dateSchema,
     profitFromDate: dateSchema.optional(),
     profitToDate: dateSchema.optional(),
+    summaryFromDate: dateSchema.optional(),
+    summaryToDate: dateSchema.optional(),
   })
   .superRefine((value, context) => {
     if (Boolean(value.profitFromDate) !== Boolean(value.profitToDate)) {
@@ -36,6 +38,26 @@ const dashboardInputSchema = z
         path: ["profitFromDate"],
       });
     }
+
+    if (Boolean(value.summaryFromDate) !== Boolean(value.summaryToDate)) {
+      context.addIssue({
+        code: "custom",
+        message: "Summary start and end dates must be provided together",
+        path: ["summaryFromDate"],
+      });
+    }
+
+    if (
+      value.summaryFromDate &&
+      value.summaryToDate &&
+      value.summaryFromDate > value.summaryToDate
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Summary start date must be on or before the end date",
+        path: ["summaryFromDate"],
+      });
+    }
   });
 
 function previousCalendarDate(date: string) {
@@ -49,6 +71,8 @@ export const dashboardRouter = createTRPCRouter({
     const monthStartDate = `${input.date.slice(0, 7)}-01`;
     const profitFromDate = input.profitFromDate ?? monthStartDate;
     const profitToDate = input.profitToDate ?? input.date;
+    const summaryFromDate = input.summaryFromDate ?? monthStartDate;
+    const summaryToDate = input.summaryToDate ?? input.date;
     const [configuration] = await ctx.database
       .select()
       .from(balanceConfiguration)
@@ -102,6 +126,10 @@ export const dashboardRouter = createTRPCRouter({
       .limit(8);
     const latestCashBank = await ctx.database
       .select({
+        bankIn: cashBankTransaction.bankIn,
+        bankOut: cashBankTransaction.bankOut,
+        cashIn: cashBankTransaction.cashIn,
+        cashOut: cashBankTransaction.cashOut,
         createdAt: cashBankTransaction.createdAt,
         currency: cashBankTransaction.currency,
         description: cashBankTransaction.description,
@@ -179,9 +207,48 @@ export const dashboardRouter = createTRPCRouter({
           isNull(cashBankTransaction.voidedAt),
         ),
       );
+    const [summaryExchangeProfit] = await ctx.database
+      .select({
+        value: sql<string>`coalesce(sum(${exchangeTransaction.formulaProfitThb}), 0)::numeric(20, 4)::text`,
+      })
+      .from(exchangeTransaction)
+      .where(
+        and(
+          gte(exchangeTransaction.transactionDate, summaryFromDate),
+          lte(exchangeTransaction.transactionDate, summaryToDate),
+          isNull(exchangeTransaction.voidedAt),
+        ),
+      );
+    const [summaryCashBankFees] = await ctx.database
+      .select({
+        mmk: sql<string>`coalesce(sum(case when ${cashBankTransaction.currency} = 'MMK' then ${cashBankTransaction.feeAmount} else 0 end), 0)::numeric(20, 4)::text`,
+        thb: sql<string>`coalesce(sum(case when ${cashBankTransaction.currency} = 'THB' then ${cashBankTransaction.feeAmount} else 0 end), 0)::numeric(20, 4)::text`,
+      })
+      .from(cashBankTransaction)
+      .where(
+        and(
+          gte(cashBankTransaction.transactionDate, summaryFromDate),
+          lte(cashBankTransaction.transactionDate, summaryToDate),
+          isNull(cashBankTransaction.voidedAt),
+        ),
+      );
+    const [summaryExpenses] = await ctx.database
+      .select({
+        mmk: sql<string>`coalesce(sum(case when ${expense.currency} = 'MMK' then ${expense.amount} else 0 end), 0)::numeric(20, 4)::text`,
+        thb: sql<string>`coalesce(sum(case when ${expense.currency} = 'THB' then ${expense.amount} else 0 end), 0)::numeric(20, 4)::text`,
+      })
+      .from(expense)
+      .where(
+        and(
+          gte(expense.transactionDate, summaryFromDate),
+          lte(expense.transactionDate, summaryToDate),
+          isNull(expense.voidedAt),
+        ),
+      );
 
     const exchangeTotal = totalSchema.parse(exchangeProfit ?? { value: "0" }).value;
     const rangeExchangeTotal = totalSchema.parse(rangeExchangeProfit ?? { value: "0" }).value;
+    const summaryExchangeTotal = totalSchema.parse(summaryExchangeProfit ?? { value: "0" }).value;
 
     return {
       balanceConfiguration: configuration
@@ -207,6 +274,15 @@ export const dashboardRouter = createTRPCRouter({
         mmk: rangeCashBankFees?.mmk ?? "0.0000",
         thb: addMoney(rangeExchangeTotal, rangeCashBankFees?.thb ?? "0.0000"),
         toDate: profitToDate,
+      },
+      summaryForRange: {
+        cashBankFeeMmk: summaryCashBankFees?.mmk ?? "0.0000",
+        cashBankFeeThb: summaryCashBankFees?.thb ?? "0.0000",
+        exchangeFormulaProfitThb: summaryExchangeTotal,
+        expensesMmk: summaryExpenses?.mmk ?? "0.0000",
+        expensesThb: summaryExpenses?.thb ?? "0.0000",
+        fromDate: summaryFromDate,
+        toDate: summaryToDate,
       },
       latestTransactions: [
         ...latestExchanges.map((transaction) => ({

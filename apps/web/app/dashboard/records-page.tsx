@@ -3,7 +3,9 @@ import { headers } from "next/headers";
 
 import { appRouter, createTRPCContext } from "@repo/api";
 
-import { formatYangonDateTime, getYangonDateTime } from "@/lib/exchange-rate";
+import { getYangonDateTime } from "@/lib/exchange-rate";
+import type { MessageKey } from "@/lib/i18n";
+import { getServerTranslator } from "@/lib/i18n-server";
 
 import { NewEntryDialog } from "./new-entry-dialog";
 import { SingleDateFilter } from "./single-date-filter";
@@ -14,6 +16,13 @@ type OperationRecord = Awaited<ReturnType<AppRouterCaller["operations"]["list"]>
 type CashBankRecord = Extract<OperationRecord, { type: "cash-bank" }>;
 type ExchangeRecord = Extract<OperationRecord, { type: "exchange" }>;
 type ExpenseRecord = Extract<OperationRecord, { type: "expense" }>;
+type Translator = (key: MessageKey) => string;
+
+const exchangeHistoryGrid =
+  "grid-cols-[125px_105px_140px_110px_115px_110px_115px_125px_115px_80px]";
+const cashBankHistoryGrid =
+  "grid-cols-[110px_100px_70px_100px_105px_105px_105px_105px_90px_65px] lg:grid-cols-[1.05fr_.95fr_.65fr_.9fr_repeat(4,minmax(0,1fr))_.8fr_.55fr]";
+const expenseHistoryGrid = "grid-cols-[170px_minmax(350px,1fr)_160px_96px]";
 
 function todayInYangon() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -45,9 +54,9 @@ function formatMoney(value: string, currency: "MMK" | "THB") {
   }).format(Number(value));
 }
 
-function formatMovementAmount(value: string, currency: "MMK" | "THB", includeCurrency = false) {
+function formatMovementAmount(value: string, currency: "MMK" | "THB") {
   if (Number(value) === 0) return "—";
-  return `${formatMoney(value, currency)}${includeCurrency ? ` ${currency}` : ""}`;
+  return formatMoney(value, currency);
 }
 
 interface RecordsPageProps {
@@ -56,13 +65,14 @@ interface RecordsPageProps {
 }
 
 export async function RecordsPage({ searchParams, type }: Readonly<RecordsPageProps>) {
+  const { t } = await getServerTranslator();
   const caller = appRouter.createCaller(await createTRPCContext({ headers: await headers() }));
   const current = getYangonDateTime();
   const today = current.date || todayInYangon();
   const date = selectedDate((await searchParams).date, today);
   const records = await caller.operations.list({ date, type });
   const pageTitle =
-    type === "exchange" ? "Exchange" : type === "cash-bank" ? "Cash ↔ Bank" : "Expenses";
+    type === "exchange" ? t("exchange") : type === "cash-bank" ? t("cashBank") : t("expenses");
 
   return (
     <div className="space-y-7">
@@ -80,29 +90,30 @@ export async function RecordsPage({ searchParams, type }: Readonly<RecordsPagePr
       <section className="border border-[var(--hairline)] bg-white">
         {records.length === 0 ? (
           <div className="px-5 py-14 text-center sm:px-6">
-            <p className="font-semibold text-[var(--ink)]">No records for selected date</p>
+            <p className="font-semibold text-[var(--ink)]">{t("noRecordsDate")}</p>
           </div>
         ) : type === "exchange" ? (
           <ExchangeHistory
             records={records.filter(
               (record): record is ExchangeRecord => record.type === "exchange",
             )}
+            t={t}
           />
         ) : type === "cash-bank" ? (
           <CashBankHistory
             records={records.filter(
               (record): record is CashBankRecord => record.type === "cash-bank",
             )}
+            t={t}
           />
         ) : (
           <ExpenseHistory
             records={records.filter((record): record is ExpenseRecord => record.type === "expense")}
+            t={t}
           />
         )}
       </section>
-      <p className="text-xs leading-5 text-[var(--ink-muted)]">
-        Showing up to 100 records for selected date.
-      </p>
+      <p className="text-xs leading-5 text-[var(--ink-muted)]">{t("showingRecords")}</p>
     </div>
   );
 }
@@ -113,25 +124,14 @@ function editHref(type: RecordType, id: string) {
   return `/dashboard/expenses/${id}/edit`;
 }
 
-function EditRecordLink({ href }: Readonly<{ href: string }>) {
+function EditRecordLink({ href, t }: Readonly<{ href: string; t: Translator }>) {
   return (
     <Link
       className="text-xs font-semibold text-[var(--primary-dark)] underline underline-offset-4"
       href={href}
     >
-      Edit
+      {t("edit")}
     </Link>
-  );
-}
-
-function MobileMetric({ label, value }: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="bg-white p-3">
-      <p className="text-[9px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</p>
-    </div>
   );
 }
 
@@ -146,28 +146,34 @@ function CompactDateTime({ value }: Readonly<{ value: string }>) {
   );
 }
 
-function ExchangeHistory({ records }: Readonly<{ records: ExchangeRecord[] }>) {
+function ExchangeHistory({ records, t }: Readonly<{ records: ExchangeRecord[]; t: Translator }>) {
   return (
-    <>
-      <div className="hidden xl:block">
-        <div className="grid grid-cols-[95px_80px_minmax(65px,1.2fr)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(95px,1fr)_minmax(85px,0.9fr)_55px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-3 py-3 text-[10px] font-semibold tracking-[0.04em] text-[var(--ink-muted)] uppercase">
-          <span>Date / Time</span>
-          <span>Direction</span>
-          <span>Description</span>
-          <span className="text-right">IN THB</span>
-          <span className="text-right">IN MMK</span>
-          <span className="text-right">OUT THB</span>
-          <span className="text-right">ER MMK</span>
-          <span className="text-right">Actual MMK</span>
-          <span className="text-right">Profit (THB)</span>
-          <span className="text-right">Action</span>
+    <div
+      aria-label={`${t("exchange")} ${t("transactions")}`}
+      className="w-full overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)]"
+      tabIndex={0}
+    >
+      <div className="min-w-[1172px]">
+        <div
+          className={`grid ${exchangeHistoryGrid} border-b border-[var(--hairline)] bg-[#f4f7fb] px-4 py-3 text-[10px] font-semibold tracking-[0.04em] whitespace-nowrap text-[var(--ink-muted)] uppercase`}
+        >
+          <span>{t("dateTime")}</span>
+          <span>{t("direction")}</span>
+          <span>{t("description")}</span>
+          <span className="pr-2 text-right">IN THB</span>
+          <span className="pr-2 text-right">IN MMK</span>
+          <span className="pr-2 text-right">OUT THB</span>
+          <span className="pr-2 text-right">ER MMK</span>
+          <span className="pr-2 text-right">Actual MMK</span>
+          <span className="pr-2 text-right">{t("profitThb")}</span>
+          <span className="pr-2 text-right">{t("action")}</span>
         </div>
         <div className="divide-y divide-[var(--hairline)]">
           {records.map((record) => {
             const isThbToMmk = record.direction === "thb-to-mmk";
             return (
               <article
-                className="grid grid-cols-[95px_80px_minmax(65px,1.2fr)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(95px,1fr)_minmax(85px,0.9fr)_55px] items-center px-3 py-4 text-[13px]"
+                className={`grid ${exchangeHistoryGrid} items-center px-4 py-4 text-[13px]`}
                 key={record.id}
               >
                 <CompactDateTime value={record.transactionAt} />
@@ -185,84 +191,44 @@ function ExchangeHistory({ records }: Readonly<{ records: ExchangeRecord[] }>) {
                 />
                 <AmountCell value={isThbToMmk ? formatMoney(record.actualPayout, "MMK") : "—"} />
                 <AmountCell value={formatMoney(record.formulaProfitThb, "THB")} />
-                <div className="text-right">
-                  <EditRecordLink href={editHref("exchange", record.id)} />
+                <div className="pr-2 text-right">
+                  <EditRecordLink href={editHref("exchange", record.id)} t={t} />
                 </div>
               </article>
             );
           })}
         </div>
       </div>
-
-      <div className="divide-y divide-[var(--hairline)] xl:hidden">
-        {records.map((record) => {
-          const isThbToMmk = record.direction === "thb-to-mmk";
-          return (
-            <article className="p-5 sm:p-6" key={record.id}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-[var(--ink)]">{record.description || "-"}</p>
-                  <div className="mt-1">
-                    <CompactDateTime value={record.transactionAt} />
-                  </div>
-                </div>
-                <EditRecordLink href={editHref("exchange", record.id)} />
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-3">
-                <MobileMetric label="Direction" value={isThbToMmk ? "THB → MMK" : "MMK → THB"} />
-                <MobileMetric
-                  label="IN THB"
-                  value={isThbToMmk ? `${formatMoney(record.sourceAmount, "THB")} THB` : "—"}
-                />
-                <MobileMetric
-                  label="IN MMK"
-                  value={isThbToMmk ? "—" : `${formatMoney(record.sourceAmount, "MMK")} MMK`}
-                />
-                <MobileMetric
-                  label="OUT THB"
-                  value={isThbToMmk ? "—" : `${formatMoney(record.actualPayout, "THB")} THB`}
-                />
-                <MobileMetric
-                  label="ER MMK"
-                  value={isThbToMmk ? `${formatMoney(record.calculatedPayout, "MMK")} MMK` : "—"}
-                />
-                <MobileMetric
-                  label="Actual MMK"
-                  value={isThbToMmk ? `${formatMoney(record.actualPayout, "MMK")} MMK` : "—"}
-                />
-                <MobileMetric
-                  label="Profit (THB)"
-                  value={`${formatMoney(record.formulaProfitThb, "THB")} THB`}
-                />
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </>
+    </div>
   );
 }
 
-function CashBankHistory({ records }: Readonly<{ records: CashBankRecord[] }>) {
+function CashBankHistory({ records, t }: Readonly<{ records: CashBankRecord[]; t: Translator }>) {
   return (
-    <>
-      <div className="hidden xl:block">
-        <div className="grid grid-cols-[100px_85px_50px_minmax(105px,1.15fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(85px,0.9fr)_60px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-3 py-3 text-[10px] font-semibold tracking-[0.04em] text-[var(--ink-muted)] uppercase">
-          <span>Date / Time</span>
-          <span>Direction</span>
-          <span>Currency</span>
-          <span className="text-right">Principal</span>
-          <span className="text-right">Bank In</span>
-          <span className="text-right">Cash Out</span>
-          <span className="text-right">Cash In</span>
-          <span className="text-right">Bank Out</span>
-          <span className="text-right">Profit</span>
-          <span className="text-right">Action</span>
+    <div
+      aria-label={`${t("cashBank")} ${t("transactions")}`}
+      className="w-full overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)]"
+      tabIndex={0}
+    >
+      <div className="min-w-[987px] lg:min-w-0">
+        <div
+          className={`grid ${cashBankHistoryGrid} border-b border-[var(--hairline)] bg-[#f4f7fb] px-4 py-3 text-[10px] font-semibold tracking-[0.04em] whitespace-nowrap text-[var(--ink-muted)] uppercase`}
+        >
+          <span>{t("dateTime")}</span>
+          <span>{t("direction")}</span>
+          <span>{t("currency")}</span>
+          <span>{t("description")}</span>
+          <span className="pr-2 text-right">{t("bankIn")}</span>
+          <span className="pr-2 text-right">{t("cashOut")}</span>
+          <span className="pr-2 text-right">{t("cashIn")}</span>
+          <span className="pr-2 text-right">{t("bankOut")}</span>
+          <span className="pr-2 text-right">{t("profit")}</span>
+          <span className="pr-2 text-right">{t("action")}</span>
         </div>
         <div className="divide-y divide-[var(--hairline)]">
           {records.map((record) => (
             <article
-              className="grid grid-cols-[100px_85px_50px_minmax(105px,1.15fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(85px,0.9fr)_60px] items-center px-3 py-4 text-[13px]"
+              className={`grid ${cashBankHistoryGrid} items-center px-4 py-4 text-[13px]`}
               key={record.id}
             >
               <CompactDateTime value={record.transactionAt} />
@@ -270,121 +236,68 @@ function CashBankHistory({ records }: Readonly<{ records: CashBankRecord[] }>) {
                 {record.direction === "bank-to-cash" ? "Bank → Cash" : "Cash → Bank"}
               </p>
               <p className="text-xs font-semibold text-[var(--ink-muted)]">{record.currency}</p>
-              <AmountCell value={formatMoney(record.principalAmount, record.currency)} />
+              <p className="min-w-0 pr-4 text-[var(--ink-secondary)]">
+                {record.description || "-"}
+              </p>
               <AmountCell value={formatMovementAmount(record.bankIn, record.currency)} />
               <AmountCell value={formatMovementAmount(record.cashOut, record.currency)} />
               <AmountCell value={formatMovementAmount(record.cashIn, record.currency)} />
               <AmountCell value={formatMovementAmount(record.bankOut, record.currency)} />
               <AmountCell value={formatMoney(record.feeAmount, record.currency)} />
-              <div className="text-right">
-                <EditRecordLink href={editHref("cash-bank", record.id)} />
+              <div className="pr-2 text-right">
+                <EditRecordLink href={editHref("cash-bank", record.id)} t={t} />
               </div>
             </article>
           ))}
         </div>
       </div>
-
-      <div className="divide-y divide-[var(--hairline)] xl:hidden">
-        {records.map((record) => (
-          <article className="p-5 sm:p-6" key={record.id}>
-            <div className="flex items-start justify-between gap-4">
-              <CompactDateTime value={record.transactionAt} />
-              <EditRecordLink href={editHref("cash-bank", record.id)} />
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-3">
-              <MobileMetric
-                label="Direction"
-                value={record.direction === "bank-to-cash" ? "Bank → Cash" : "Cash → Bank"}
-              />
-              <MobileMetric label="Currency" value={record.currency} />
-              <MobileMetric
-                label="Principal"
-                value={`${formatMoney(record.principalAmount, record.currency)} ${record.currency}`}
-              />
-              <MobileMetric
-                label="Bank In"
-                value={formatMovementAmount(record.bankIn, record.currency, true)}
-              />
-              <MobileMetric
-                label="Cash Out"
-                value={formatMovementAmount(record.cashOut, record.currency, true)}
-              />
-              <MobileMetric
-                label="Cash In"
-                value={formatMovementAmount(record.cashIn, record.currency, true)}
-              />
-              <MobileMetric
-                label="Bank Out"
-                value={formatMovementAmount(record.bankOut, record.currency, true)}
-              />
-              <MobileMetric
-                label="Profit"
-                value={`${formatMoney(record.feeAmount, record.currency)} ${record.currency}`}
-              />
-            </div>
-          </article>
-        ))}
-      </div>
-    </>
+    </div>
   );
 }
 
-function ExpenseHistory({ records }: Readonly<{ records: ExpenseRecord[] }>) {
+function ExpenseHistory({ records, t }: Readonly<{ records: ExpenseRecord[]; t: Translator }>) {
   return (
-    <>
-      <div className="hidden overflow-x-auto xl:block">
-        <div className="min-w-[680px]">
-          <div className="grid grid-cols-[155px_minmax(260px,1fr)_160px_70px] border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-3 text-[10px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase">
-            <span>Date / Time</span>
-            <span>Particular</span>
-            <span className="text-right">Amount</span>
-            <span className="text-right">Action</span>
-          </div>
-          <div className="divide-y divide-[var(--hairline)]">
-            {records.map((record) => (
-              <article
-                className="grid grid-cols-[155px_minmax(260px,1fr)_160px_70px] items-center px-5 py-4 text-sm"
-                key={record.id}
-              >
-                <p className="text-xs tabular-nums text-[var(--ink-muted)]">
-                  {formatYangonDateTime(record.transactionAt)}
-                </p>
-                <p className="pr-5 font-semibold text-[var(--ink)]">{record.description}</p>
+    <div
+      aria-label={`${t("expenses")} ${t("transactions")}`}
+      className="w-full overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)]"
+      tabIndex={0}
+    >
+      <div className="w-full min-w-[776px]">
+        <div
+          className={`grid ${expenseHistoryGrid} border-b border-[var(--hairline)] bg-[#f4f7fb] text-[10px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase`}
+        >
+          <span className="px-5 py-3">{t("dateTime")}</span>
+          <span className="border-l border-[var(--hairline)] px-4 py-3">{t("particular")}</span>
+          <span className="border-l border-[var(--hairline)] px-4 py-3 text-right">
+            {t("amount")}
+          </span>
+          <span className="border-l border-[var(--hairline)] px-4 py-3 text-right">
+            {t("action")}
+          </span>
+        </div>
+        <div className="divide-y divide-[var(--hairline)]">
+          {records.map((record) => (
+            <article className={`grid ${expenseHistoryGrid} text-sm`} key={record.id}>
+              <div className="flex items-center px-5 py-4">
+                <CompactDateTime value={record.transactionAt} />
+              </div>
+              <p className="flex items-center border-l border-[var(--hairline)] px-4 py-4 font-semibold text-[var(--ink)]">
+                {record.description || "-"}
+              </p>
+              <div className="flex items-center justify-end border-l border-[var(--hairline)] px-4 py-4">
                 <MoneyCell
                   currency={record.currency}
                   value={formatMoney(record.amount, record.currency)}
                 />
-                <div className="text-right">
-                  <EditRecordLink href={editHref("expense", record.id)} />
-                </div>
-              </article>
-            ))}
-          </div>
+              </div>
+              <div className="flex items-center justify-end border-l border-[var(--hairline)] px-4 py-4">
+                <EditRecordLink href={editHref("expense", record.id)} t={t} />
+              </div>
+            </article>
+          ))}
         </div>
       </div>
-
-      <div className="divide-y divide-[var(--hairline)] xl:hidden">
-        {records.map((record) => (
-          <article className="p-5 sm:p-6" key={record.id}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-semibold text-[var(--ink)]">{record.description}</p>
-                <p className="mt-1 text-xs tabular-nums text-[var(--ink-muted)]">
-                  {formatYangonDateTime(record.transactionAt)}
-                </p>
-              </div>
-              <EditRecordLink href={editHref("expense", record.id)} />
-            </div>
-            <div className="mt-5 grid grid-cols-1 gap-px border border-[var(--hairline)] bg-[var(--hairline)]">
-              <MobileMetric
-                label="Amount"
-                value={`${formatMoney(record.amount, record.currency)} ${record.currency}`}
-              />
-            </div>
-          </article>
-        ))}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -397,5 +310,5 @@ function MoneyCell({ currency, value }: Readonly<{ currency: "MMK" | "THB"; valu
 }
 
 function AmountCell({ value }: Readonly<{ value: string }>) {
-  return <p className="text-right font-semibold tabular-nums text-[var(--ink)]">{value}</p>;
+  return <p className="pr-2 text-right font-semibold tabular-nums text-[var(--ink)]">{value}</p>;
 }

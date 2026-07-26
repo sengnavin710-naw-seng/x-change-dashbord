@@ -16,6 +16,15 @@ export interface CreateAuthOptions {
   baseURL?: string;
   database?: Database;
   secret?: string;
+  trustedOrigins?: string[];
+}
+
+function trustedOriginsFromEnvironment() {
+  const values = process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return z.array(z.url()).parse(values ?? []);
 }
 
 export function createAuth(options: CreateAuthOptions = {}) {
@@ -24,6 +33,9 @@ export function createAuth(options: CreateAuthOptions = {}) {
     secret: options.secret ?? process.env.BETTER_AUTH_SECRET,
   });
   const database = options.database ?? getDatabase().db;
+  const trustedOrigins = Array.from(
+    new Set([environment.baseURL, ...(options.trustedOrigins ?? trustedOriginsFromEnvironment())]),
+  );
 
   return betterAuth({
     appName: "X-Change",
@@ -65,7 +77,7 @@ export function createAuth(options: CreateAuthOptions = {}) {
       }),
     },
     secret: environment.secret,
-    trustedOrigins: [environment.baseURL],
+    trustedOrigins,
     user: {
       additionalFields: {
         active: {

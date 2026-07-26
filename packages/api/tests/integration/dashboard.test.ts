@@ -302,6 +302,15 @@ describe("today dashboard", () => {
         thb: "0.0000",
         toDate: "2026-07-22",
       },
+      summaryForRange: {
+        cashBankFeeMmk: "0.0000",
+        cashBankFeeThb: "0.0000",
+        exchangeFormulaProfitThb: "0.0000",
+        expensesMmk: "0.0000",
+        expensesThb: "0.0000",
+        fromDate: "2026-07-01",
+        toDate: "2026-07-22",
+      },
       latestTransactions: [],
       totals: {
         cashBankFeeMmk: "0.0000",
@@ -559,6 +568,15 @@ describe("today dashboard", () => {
       thb: "25.7143",
       toDate: "2026-07-23",
     });
+    expect(initial.summaryForRange).toEqual({
+      cashBankFeeMmk: "1000.0000",
+      cashBankFeeThb: "20.0000",
+      exchangeFormulaProfitThb: "5.7143",
+      expensesMmk: "0.0000",
+      expensesThb: "9999.0000",
+      fromDate: "2026-07-01",
+      toDate: "2026-07-23",
+    });
 
     await caller.operations.updateCashBank({
       currency: "MMK",
@@ -587,6 +605,36 @@ describe("today dashboard", () => {
       fromDate: "2026-07-05",
       mmk: "1500.0000",
       thb: "20.0000",
+      toDate: "2026-07-10",
+    });
+    expect(filtered.summaryForRange).toEqual({
+      cashBankFeeMmk: "1500.0000",
+      cashBankFeeThb: "20.0000",
+      exchangeFormulaProfitThb: "5.7143",
+      expensesMmk: "0.0000",
+      expensesThb: "9999.0000",
+      fromDate: "2026-07-01",
+      toDate: "2026-07-23",
+    });
+
+    const summaryFiltered = await caller.dashboard.today({
+      date: "2026-07-23",
+      summaryFromDate: "2026-07-05",
+      summaryToDate: "2026-07-10",
+    });
+    expect(summaryFiltered.profitForRange).toEqual({
+      fromDate: "2026-07-01",
+      mmk: "1500.0000",
+      thb: "25.7143",
+      toDate: "2026-07-23",
+    });
+    expect(summaryFiltered.summaryForRange).toEqual({
+      cashBankFeeMmk: "1500.0000",
+      cashBankFeeThb: "20.0000",
+      exchangeFormulaProfitThb: "0.0000",
+      expensesMmk: "0.0000",
+      expensesThb: "0.0000",
+      fromDate: "2026-07-05",
       toDate: "2026-07-10",
     });
   });

@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useLanguage } from "../language-provider";
+import { LanguageSwitcher } from "../language-switcher";
+
 type NavigationIconName =
-  "balance" | "bank" | "exchange" | "expenses" | "overview" | "rate" | "summary" | "transactions";
+  "balance" | "bank" | "exchange" | "expenses" | "overview" | "rate" | "transactions";
 
 function NavigationIcon({ name }: Readonly<{ name: NavigationIconName }>) {
   const paths = {
@@ -47,7 +50,6 @@ function NavigationIcon({ name }: Readonly<{ name: NavigationIconName }>) {
         <path d="m6 18 12-12" />
       </>
     ),
-    summary: <path d="M4 19h16M6 16v-5m6 5V5m6 11V8" />,
     transactions: (
       <>
         <path d="M8 6h12M8 12h12M8 18h12" />
@@ -76,47 +78,62 @@ function NavigationIcon({ name }: Readonly<{ name: NavigationIconName }>) {
 
 const navigation = [
   {
-    label: "Dashboard",
-    items: [
-      { href: "/dashboard", icon: "overview", label: "Overview" },
-      { href: "/dashboard/summary", icon: "summary", label: "Summary Details" },
-    ],
+    label: "dashboard",
+    items: [{ href: "/dashboard", icon: "overview", label: "overview" }],
   },
   {
-    label: "Transactions",
+    label: "transactions",
     items: [
-      { href: "/dashboard/exchange", icon: "exchange", label: "Exchange" },
-      { href: "/dashboard/cash-bank", icon: "bank", label: "Cash ↔ Bank" },
-      { href: "/dashboard/expenses", icon: "expenses", label: "Expenses" },
+      { href: "/dashboard/exchange", icon: "exchange", label: "exchange" },
+      { href: "/dashboard/cash-bank", icon: "bank", label: "cashBank" },
+      { href: "/dashboard/expenses", icon: "expenses", label: "expenses" },
       {
         href: "/dashboard/transactions",
         icon: "transactions",
-        label: "All Transactions",
+        label: "allTransactions",
       },
     ],
   },
   {
-    label: "Settings",
+    label: "settings",
     items: [
-      { href: "/dashboard/exchange-rates", icon: "rate", label: "Exchange Rate" },
+      { href: "/dashboard/exchange-rates", icon: "rate", label: "exchangeRate" },
       {
         href: "/dashboard/balances",
         icon: "balance",
-        label: "Opening / Closing Balance",
+        label: "balanceSetup",
       },
     ],
   },
-] as const;
+] as const satisfies ReadonlyArray<{
+  items: ReadonlyArray<{
+    href: string;
+    icon: NavigationIconName;
+    label:
+      | "allTransactions"
+      | "balanceSetup"
+      | "cashBank"
+      | "exchange"
+      | "exchangeRate"
+      | "expenses"
+      | "overview";
+  }>;
+  label: "dashboard" | "settings" | "transactions";
+}>;
 
-export function DashboardNavigation({ mobile = false }: Readonly<{ mobile?: boolean }>) {
+export function DashboardNavigation({
+  mobile = false,
+  onNavigate,
+}: Readonly<{ mobile?: boolean; onNavigate?: () => void }>) {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   return (
-    <nav aria-label="Dashboard navigation" className={mobile ? "space-y-4" : "space-y-6"}>
+    <nav aria-label={t("dashboard")} className={mobile ? "space-y-4" : "space-y-6"}>
       {navigation.map((group) => (
         <div key={group.label}>
           <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.14em] text-[var(--ink-secondary)] uppercase">
-            {group.label}
+            {t(group.label)}
           </p>
           <div className="space-y-1">
             {group.items.map((item) => {
@@ -135,12 +152,14 @@ export function DashboardNavigation({ mobile = false }: Readonly<{ mobile?: bool
                   }`}
                   href={item.href}
                   key={item.href}
+                  {...(onNavigate ? { onClick: onNavigate } : {})}
                 >
                   <NavigationIcon name={item.icon} />
-                  <span className="text-sm font-semibold leading-5">{item.label}</span>
+                  <span className="text-sm font-semibold leading-5">{t(item.label)}</span>
                 </Link>
               );
             })}
+            {group.label === "settings" ? <LanguageSwitcher navigation /> : null}
           </div>
         </div>
       ))}

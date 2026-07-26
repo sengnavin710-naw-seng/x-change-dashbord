@@ -14,9 +14,12 @@ import {
   formatWholePayout,
   formatYangonDateTime,
   getYangonDateTime,
-  toYangonIso,
+  toYangonIsoFromLocalDateTime,
 } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
+
+import { DateTimeInput, FormSelect } from "../../../form-controls";
+import { useLanguage } from "../../../../language-provider";
 
 type ExchangeRecord = inferRouterOutputs<AppRouter>["operations"]["getExchange"];
 type RateMode = "historical" | "override" | "preserve";
@@ -29,10 +32,12 @@ function value(form: FormData, name: string) {
 
 export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }>) {
   const router = useRouter();
+  const { t } = useLanguage();
   const utils = trpc.useUtils();
   const initialDateTime = getYangonDateTime(new Date(record.transactionAt));
-  const [transactionDate, setTransactionDate] = useState(initialDateTime.date);
-  const [transactionTime, setTransactionTime] = useState(initialDateTime.time);
+  const [transactionDateTime, setTransactionDateTime] = useState(
+    `${initialDateTime.date}T${initialDateTime.time}`,
+  );
   const [direction, setDirection] = useState(record.direction);
   const [sourceAmount, setSourceAmount] = useState(record.sourceAmount);
   const [actualPayout, setActualPayout] = useState(String(Math.round(Number(record.actualPayout))));
@@ -40,8 +45,8 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
   const [overrideSpread, setOverrideSpread] = useState(record.spread);
   const [error, setError] = useState<string | null>(null);
   const transactionAt = useMemo(
-    () => toYangonIso(transactionDate, transactionTime),
-    [transactionDate, transactionTime],
+    () => toYangonIsoFromLocalDateTime(transactionDateTime),
+    [transactionDateTime],
   );
   const historicalRate = trpc.exchangeRates.current.useQuery(
     { at: transactionAt },
@@ -92,7 +97,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
       router.push("/dashboard/exchange");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update record");
+      setError(cause instanceof Error ? cause.message : t("unableToUpdateRecord"));
     }
   }
 
@@ -100,28 +105,17 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
     <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
       <div className="grid items-start gap-5 p-5 sm:p-7 [&>label]:block">
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Date</span>
-          <Input
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("dateTime")}</span>
+          <DateTimeInput
             disabled={mutation.isPending}
-            onChange={(event) => setTransactionDate(event.target.value)}
+            onChange={(event) => setTransactionDateTime(event.target.value)}
             required
-            type="date"
-            value={transactionDate}
+            value={transactionDateTime}
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Time</span>
-          <Input
-            disabled={mutation.isPending}
-            onChange={(event) => setTransactionTime(event.target.value)}
-            required
-            type="time"
-            value={transactionTime}
-          />
-        </label>
-        <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Direction</span>
-          <select
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("direction")}</span>
+          <FormSelect
             className={selectClass}
             disabled={mutation.isPending}
             onChange={(event) => {
@@ -131,9 +125,9 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
             }}
             value={direction}
           >
-            <option value="thb-to-mmk">THB to MMK</option>
-            <option value="mmk-to-thb">MMK to THB</option>
-          </select>
+            <option value="thb-to-mmk">{t("thbToMmk")}</option>
+            <option value="mmk-to-thb">{t("mmkToThb")}</option>
+          </FormSelect>
         </label>
         <label className="space-y-2">
           <span className="block text-sm font-semibold text-[var(--ink)]">
@@ -149,7 +143,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
         </label>
         <label className="space-y-2">
           <span className="block text-sm font-semibold text-[var(--ink)]">
-            {direction === "thb-to-mmk" ? "Actual MMK" : "Actual THB"}
+            {direction === "thb-to-mmk" ? t("actualMmk") : t("actualThb")}
           </span>
           <Input
             disabled={mutation.isPending}
@@ -161,21 +155,23 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Rate Handling</span>
-          <select
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("rateHandling")}</span>
+          <FormSelect
             className={selectClass}
             disabled={mutation.isPending}
             onChange={(event) => setRateMode(event.target.value as RateMode)}
             value={rateMode}
           >
-            <option value="preserve">Preserve Original</option>
-            <option value="historical">Reapply Historical</option>
-            <option value="override">Override Spread</option>
-          </select>
+            <option value="preserve">{t("preserveOriginal")}</option>
+            <option value="historical">{t("reapplyHistorical")}</option>
+            <option value="override">{t("overrideSpread")}</option>
+          </FormSelect>
         </label>
         {rateMode === "override" ? (
           <label className="space-y-2">
-            <span className="block text-sm font-semibold text-[var(--ink)]">Override Spread</span>
+            <span className="block text-sm font-semibold text-[var(--ink)]">
+              {t("overrideSpread")}
+            </span>
             <Input
               disabled={mutation.isPending}
               inputMode="decimal"
@@ -189,7 +185,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
             <div>
               <p className="text-[10px] font-semibold tracking-[0.1em] text-[var(--primary)] uppercase">
-                Rate snapshot
+                {t("rateSnapshot")}
               </p>
               <p className="mt-1 text-xs text-[var(--ink-muted)]">
                 {rateMode === "historical"
@@ -213,16 +209,16 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
                 <strong>{formatWholePayout(calculation.calculatedPayout)}</strong>
               </p>
               <p>
-                Profit <strong>{calculation.formulaProfitThb} THB</strong>
+                {t("profit")} <strong>{calculation.formulaProfitThb} THB</strong>
               </p>
               <p>
-                Variance <strong>{calculation.settlementVarianceThb ?? "—"} THB</strong>
+                {t("variance")} <strong>{calculation.settlementVarianceThb ?? "—"} THB</strong>
               </p>
             </div>
           ) : null}
         </div>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Description</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("description")}</span>
           <Input
             defaultValue={record.description ?? ""}
             disabled={mutation.isPending}
@@ -230,7 +226,7 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Edit Reason</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("editReason")}</span>
           <Input disabled={mutation.isPending} minLength={3} name="reason" required />
           <span className="block text-[10px] leading-5 text-[var(--ink-muted)]">
             Required and preserved in revision history.
@@ -252,10 +248,10 @@ export function EditExchangeForm({ record }: Readonly<{ record: ExchangeRecord }
           type="button"
           variant="outline"
         >
-          Cancel
+          {t("cancel")}
         </Button>
         <Button disabled={mutation.isPending || !calculation} type="submit">
-          {mutation.isPending ? "Updating…" : "Update Record"}
+          {mutation.isPending ? t("updating") : t("updateRecord")}
         </Button>
       </div>
     </form>

@@ -7,8 +7,11 @@ import { Button } from "@repo/ui/button";
 
 import { authClient } from "@/lib/auth-client";
 
+import { useLanguage } from "../language-provider";
+
 export function SignOutButton() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [isPending, setIsPending] = useState(false);
 
   async function signOut() {
@@ -26,7 +29,7 @@ export function SignOutButton() {
       size="sm"
       variant="outline"
     >
-      {isPending ? "Signing out…" : "Sign out"}
+      {isPending ? t("signingOut") : t("signOut")}
     </Button>
   );
 }

@@ -13,6 +13,7 @@ import {
   toYangonIso,
 } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
+import { useLanguage } from "../../language-provider";
 
 function Field({
   children,
@@ -22,8 +23,8 @@ function Field({
   label: string;
 }>) {
   return (
-    <label className="block space-y-2">
-      <span className="text-sm font-semibold text-[var(--ink)]">{label}</span>
+    <label className="grid gap-3">
+      <span className="text-sm leading-6 font-semibold text-[var(--ink)]">{label}</span>
       {children}
     </label>
   );
@@ -47,23 +48,25 @@ function ProfitStrip({
   buyingProfit?: string | undefined;
   sellingProfit?: string | undefined;
 }>) {
+  const { t } = useLanguage();
+
   return (
     <div
       aria-live="polite"
       className="grid border-t border-[var(--hairline)] bg-[#f4f7fb] sm:grid-cols-[minmax(140px,0.7fr)_1fr_1fr]"
     >
       <div className="px-4 py-3">
-        <p className="text-sm font-semibold text-[var(--ink)]">Profit</p>
-        <p className="mt-0.5 text-[11px] text-[var(--ink-muted)]">per MMK 100,000</p>
+        <p className="text-sm font-semibold text-[var(--ink)]">{t("profit")}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--ink-muted)]">{t("perMmkHundredThousand")}</p>
       </div>
       <div className="border-t border-[var(--hairline)] px-4 py-3 sm:border-t-0 sm:border-l">
-        <p className="text-xs text-[var(--ink-muted)]">THB to MMK</p>
+        <p className="text-xs text-[var(--ink-muted)]">{t("thbToMmk")}</p>
         <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--ink)]">
           {sellingProfit ? `${formatProfit(sellingProfit)} THB` : "—"}
         </p>
       </div>
       <div className="border-t border-[var(--hairline)] px-4 py-3 sm:border-t-0 sm:border-l">
-        <p className="text-xs text-[var(--ink-muted)]">MMK to THB</p>
+        <p className="text-xs text-[var(--ink-muted)]">{t("mmkToThb")}</p>
         <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--ink)]">
           {buyingProfit ? `${formatProfit(buyingProfit)} THB` : "—"}
         </p>
@@ -105,13 +108,12 @@ function configurationFromStoredRate(rate: {
 }
 
 export function RateSettings() {
+  const { t } = useLanguage();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const initialLocal = useMemo(() => getYangonDateTime(), []);
   const [isOpen, setIsOpen] = useState(false);
   const [baseRateDraft, setBaseRateDraft] = useState<string | null>(null);
   const [thbToMmkSellingRateDraft, setThbToMmkSellingRateDraft] = useState<string | null>(null);
   const [mmkToThbBuyingRateDraft, setMmkToThbBuyingRateDraft] = useState<string | null>(null);
-  const [effectiveAt, setEffectiveAt] = useState(`${initialLocal.date}T${initialLocal.time}`);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const current = trpc.exchangeRates.current.useQuery();
@@ -161,11 +163,9 @@ export function RateSettings() {
   const currentConfiguration = current.data ? configurationFromStoredRate(current.data) : null;
 
   function resetDrafts() {
-    const currentLocal = getYangonDateTime();
     setBaseRateDraft(null);
     setThbToMmkSellingRateDraft(null);
     setMmkToThbBuyingRateDraft(null);
-    setEffectiveAt(`${currentLocal.date}T${currentLocal.time}`);
     setError(null);
   }
 
@@ -188,9 +188,10 @@ export function RateSettings() {
     setSuccess(null);
 
     try {
+      const effectiveAt = getYangonDateTime();
       await createRate.mutateAsync({
         baseRate,
-        effectiveAt: toYangonIso(effectiveAt.slice(0, 10), effectiveAt.slice(11, 16)),
+        effectiveAt: toYangonIso(effectiveAt.date, effectiveAt.time),
         mmkToThbBuyingRate,
         note: String(form.get("note") ?? "").trim() || undefined,
         thbToMmkSellingRate,
@@ -199,10 +200,10 @@ export function RateSettings() {
       setBaseRateDraft(null);
       setThbToMmkSellingRateDraft(null);
       setMmkToThbBuyingRateDraft(null);
-      setSuccess("Rate saved.");
+      setSuccess(t("rateSaved"));
       setIsOpen(false);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Unable to save the rate version.";
+      const message = cause instanceof Error ? cause.message : t("unableToSaveRate");
       setError(rateErrorMessage(message));
     }
   }
@@ -211,9 +212,9 @@ export function RateSettings() {
     <div className="space-y-6">
       <header className="flex items-center justify-between gap-5 border-b border-[var(--hairline)] pb-5">
         <h1 className="font-[var(--font-display)] text-3xl font-medium tracking-[-0.03em] text-[var(--ink)] sm:text-4xl">
-          Exchange Rate
+          {t("exchangeRate")}
         </h1>
-        <Button onClick={openDialog}>New Rate</Button>
+        <Button onClick={openDialog}>{t("newRate")}</Button>
       </header>
 
       {success ? (
@@ -231,7 +232,7 @@ export function RateSettings() {
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--hairline)] px-5 py-4 sm:px-7">
           <h2 id="current-rate-heading" className="text-lg font-semibold text-[var(--ink)]">
-            Current Rate
+            {t("currentRate")}
           </h2>
           {current.data ? (
             <p className="text-xs text-[var(--ink-muted)]">
@@ -242,7 +243,7 @@ export function RateSettings() {
 
         {current.isLoading ? (
           <p className="px-5 py-8 text-sm text-[var(--ink-muted)]" role="status">
-            Loading…
+            {t("loading")}
           </p>
         ) : current.error ? (
           <p
@@ -254,13 +255,13 @@ export function RateSettings() {
         ) : current.data && currentConfiguration ? (
           <>
             <div className="grid sm:grid-cols-3">
-              <RateCell label="Base Rate" value={formatRate(current.data.baseRate)} />
+              <RateCell label={t("baseRate")} value={formatRate(current.data.baseRate)} />
               <RateCell
-                label="THB to MMK · Sell Rate"
+                label={`${t("thbToMmk")} · ${t("sellRate")}`}
                 value={formatRate(current.data.thbToMmkCustomerRate)}
               />
               <RateCell
-                label="MMK to THB · Buy Rate"
+                label={`${t("mmkToThb")} · ${t("buyRate")}`}
                 value={formatRate(current.data.mmkToThbCustomerRate)}
               />
             </div>
@@ -269,11 +270,7 @@ export function RateSettings() {
               sellingProfit={currentConfiguration.thbToMmkProfitPerHundredThousand}
             />
           </>
-        ) : (
-          <p className="border-l-4 border-[var(--warning)] bg-[#fff8df] px-5 py-4 text-sm">
-            No rate yet.
-          </p>
-        )}
+        ) : null}
       </section>
 
       <section
@@ -282,11 +279,11 @@ export function RateSettings() {
       >
         <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-7">
           <h2 id="rate-history-heading" className="text-lg font-semibold text-[var(--ink)]">
-            Rate History
+            {t("rateHistory")}
           </h2>
         </div>
         {history.isLoading ? (
-          <p className="px-5 py-8 text-sm text-[var(--ink-muted)]">Loading…</p>
+          <p className="px-5 py-8 text-sm text-[var(--ink-muted)]">{t("loading")}</p>
         ) : history.error ? (
           <p
             className="m-5 border-l-4 border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm"
@@ -308,24 +305,26 @@ export function RateSettings() {
                       {formatYangonDateTime(rate.effectiveAt)}
                     </p>
                     {rate.id === current.data?.id ? (
-                      <p className="mt-1 text-[10px] font-semibold text-[var(--primary)]">Active</p>
+                      <p className="mt-1 text-[10px] font-semibold text-[var(--primary)]">
+                        {t("active")}
+                      </p>
                     ) : null}
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-xs tabular-nums">
                     <div>
-                      <p className="text-[var(--ink-muted)]">Base Rate</p>
+                      <p className="text-[var(--ink-muted)]">{t("baseRate")}</p>
                       <p className="mt-1 font-semibold text-[var(--ink)]">
                         {formatRate(rate.baseRate)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[var(--ink-muted)]">THB to MMK</p>
+                      <p className="text-[var(--ink-muted)]">{t("thbToMmk")}</p>
                       <p className="mt-1 font-semibold text-[var(--ink)]">
                         {formatRate(rate.thbToMmkCustomerRate)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[var(--ink-muted)]">MMK to THB</p>
+                      <p className="text-[var(--ink-muted)]">{t("mmkToThb")}</p>
                       <p className="mt-1 font-semibold text-[var(--ink)]">
                         {formatRate(rate.mmkToThbCustomerRate)}
                       </p>
@@ -333,13 +332,17 @@ export function RateSettings() {
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <p className="text-[var(--ink-muted)]">THB to MMK Profit</p>
+                      <p className="text-[var(--ink-muted)]">
+                        {t("thbToMmk")} {t("profit")}
+                      </p>
                       <p className="mt-1 font-semibold tabular-nums text-[var(--ink)]">
                         {formatProfit(rateConfiguration.thbToMmkProfitPerHundredThousand)} THB
                       </p>
                     </div>
                     <div>
-                      <p className="text-[var(--ink-muted)]">MMK to THB Profit</p>
+                      <p className="text-[var(--ink-muted)]">
+                        {t("mmkToThb")} {t("profit")}
+                      </p>
                       <p className="mt-1 font-semibold tabular-nums text-[var(--ink)]">
                         {formatProfit(rateConfiguration.mmkToThbProfitPerHundredThousand)} THB
                       </p>
@@ -356,7 +359,7 @@ export function RateSettings() {
             })}
           </ol>
         ) : (
-          <p className="px-5 py-8 text-sm text-[var(--ink-muted)]">No history yet.</p>
+          <p className="px-5 py-8 text-sm text-[var(--ink-muted)]">{t("noHistory")}</p>
         )}
       </section>
 
@@ -375,21 +378,21 @@ export function RateSettings() {
           <header className="flex shrink-0 items-center justify-between gap-5 border-b border-[var(--hairline)] bg-[#f4f7fb] px-5 py-4 sm:px-7">
             <div>
               <p className="text-[10px] font-semibold tracking-[0.1em] text-[var(--primary)] uppercase">
-                Exchange Rate
+                {t("exchangeRate")}
               </p>
               <h2
                 className="mt-1 font-[var(--font-display)] text-xl font-medium text-[var(--ink)]"
                 id="new-rate-title"
               >
-                New Rate
+                {t("newRate")}
               </h2>
             </div>
             <button
-              aria-label="Close new rate"
+              aria-label={`${t("close")} ${t("newRate")}`}
               className="grid size-10 shrink-0 place-items-center rounded-[4px] border border-[var(--hairline-soft)] bg-white text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={createRate.isPending}
               onClick={closeDialog}
-              title="Close"
+              title={t("close")}
               type="button"
             >
               <svg
@@ -408,8 +411,8 @@ export function RateSettings() {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {isOpen ? (
               <form onSubmit={submit}>
-                <div className="grid gap-5 p-5 sm:p-7">
-                  <Field label="Base Rate">
+                <div className="grid gap-5 p-5 pt-8 sm:p-7 sm:pt-9">
+                  <Field label={t("baseRate")}>
                     <Input
                       autoFocus
                       disabled={createRate.isPending}
@@ -420,7 +423,7 @@ export function RateSettings() {
                       value={baseRate}
                     />
                   </Field>
-                  <Field label="THB to MMK · Sell Rate">
+                  <Field label={`${t("thbToMmk")} · ${t("sellRate")}`}>
                     <Input
                       disabled={createRate.isPending}
                       inputMode="decimal"
@@ -430,7 +433,7 @@ export function RateSettings() {
                       value={thbToMmkSellingRate}
                     />
                   </Field>
-                  <Field label="MMK to THB · Buy Rate">
+                  <Field label={`${t("mmkToThb")} · ${t("buyRate")}`}>
                     <Input
                       disabled={createRate.isPending}
                       inputMode="decimal"
@@ -440,16 +443,7 @@ export function RateSettings() {
                       value={mmkToThbBuyingRate}
                     />
                   </Field>
-                  <Field label="Date">
-                    <Input
-                      disabled={createRate.isPending}
-                      onChange={(event) => setEffectiveAt(event.target.value)}
-                      required
-                      type="datetime-local"
-                      value={effectiveAt}
-                    />
-                  </Field>
-                  <Field label="Note (Optional)">
+                  <Field label={t("noteOptional")}>
                     <Input disabled={createRate.isPending} maxLength={500} name="note" />
                   </Field>
                 </div>
@@ -477,7 +471,7 @@ export function RateSettings() {
                 ) : null}
                 <div className="sticky bottom-0 flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7">
                   <Button disabled={createRate.isPending || !configuration.value} type="submit">
-                    {createRate.isPending ? "Saving…" : "Save"}
+                    {createRate.isPending ? t("saving") : t("save")}
                   </Button>
                 </div>
               </form>

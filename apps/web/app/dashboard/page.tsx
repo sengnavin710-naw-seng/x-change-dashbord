@@ -20,6 +20,9 @@ type SearchParams = {
   profitFrom?: string | string[];
   profitRange?: string | string[];
   profitTo?: string | string[];
+  summaryFrom?: string | string[];
+  summaryRange?: string | string[];
+  summaryTo?: string | string[];
 };
 
 function todayInYangon() {
@@ -67,13 +70,18 @@ function isProfitDatePreset(value: string | undefined): value is ProfitDatePrese
   );
 }
 
-function profitDateFilter(values: SearchParams, today: string): ProfitDateFilterValue {
-  const requestedPreset = scalar(values.profitRange);
+function dateRangeFilter(
+  range: string | string[] | undefined,
+  from: string | string[] | undefined,
+  to: string | string[] | undefined,
+  today: string,
+): ProfitDateFilterValue {
+  const requestedPreset = scalar(range);
   const preset = isProfitDatePreset(requestedPreset) ? requestedPreset : "this-month";
 
   if (preset === "custom") {
-    const fromDate = scalar(values.profitFrom);
-    const toDate = scalar(values.profitTo);
+    const fromDate = scalar(from);
+    const toDate = scalar(to);
     if (isCalendarDate(fromDate, today) && isCalendarDate(toDate, today) && fromDate <= toDate) {
       return { fromDate, preset, toDate };
     }
@@ -122,11 +130,24 @@ export default async function DashboardPage({
   const today = todayInYangon();
   const values = await searchParams;
   const date = selectedDate(values.date, today);
-  const profitFilter = profitDateFilter(values, today);
+  const profitFilter = dateRangeFilter(
+    values.profitRange,
+    values.profitFrom,
+    values.profitTo,
+    today,
+  );
+  const summaryFilter = dateRangeFilter(
+    values.summaryRange,
+    values.summaryFrom,
+    values.summaryTo,
+    today,
+  );
   const dashboard = await caller.dashboard.today({
     date,
     profitFromDate: profitFilter.fromDate,
     profitToDate: profitFilter.toDate,
+    summaryFromDate: summaryFilter.fromDate,
+    summaryToDate: summaryFilter.toDate,
   });
 
   return (
@@ -135,6 +156,7 @@ export default async function DashboardPage({
       initialDashboard={dashboard}
       maximumDate={today}
       profitFilter={profitFilter}
+      summaryFilter={summaryFilter}
     />
   );
 }

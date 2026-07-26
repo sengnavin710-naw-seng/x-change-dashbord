@@ -15,9 +15,12 @@ import {
   formatRate,
   formatWholePayout,
   formatYangonDateTime,
-  toYangonIso,
+  toYangonIsoFromLocalDateTime,
 } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
+
+import { useLanguage } from "../../language-provider";
+import { DateTimeInput, FormSelect } from "../form-controls";
 
 type EntryType = "cash-bank" | "exchange" | "expense";
 type Direction = "mmk-to-thb" | "thb-to-mmk";
@@ -32,7 +35,7 @@ function value(form: FormData, name: string) {
 
 function Field({ children, label }: Readonly<{ children: React.ReactNode; label: string }>) {
   return (
-    <label className="grid content-start gap-2">
+    <label className="grid min-w-0 max-w-full content-start gap-2">
       <span className="text-sm font-semibold text-[var(--ink)]">{label}</span>
       {children}
     </label>
@@ -57,12 +60,12 @@ export function EntryForm({
   showTypeSelector?: boolean;
 }>) {
   const router = useRouter();
+  const { t } = useLanguage();
   const utils = trpc.useUtils();
   const [entryType, setEntryType] = useState<EntryType>(initialEntryType);
   const [cashCurrency, setCashCurrency] = useState<"MMK" | "THB">("MMK");
   const [direction, setDirection] = useState<Direction>("thb-to-mmk");
-  const [transactionDate, setTransactionDate] = useState(defaultDate);
-  const [transactionTime, setTransactionTime] = useState(defaultTime);
+  const [transactionDateTime, setTransactionDateTime] = useState(`${defaultDate}T${defaultTime}`);
   const [sourceAmount, setSourceAmount] = useState("");
   const [actualPayout, setActualPayout] = useState("");
   const [overrideEnabled, setOverrideEnabled] = useState(false);
@@ -76,8 +79,8 @@ export function EntryForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const transactionAt = useMemo(
-    () => toYangonIso(transactionDate, transactionTime),
-    [transactionDate, transactionTime],
+    () => toYangonIsoFromLocalDateTime(transactionDateTime),
+    [transactionDateTime],
   );
   const rateQuery = trpc.exchangeRates.current.useQuery(
     { at: transactionAt },
@@ -192,19 +195,21 @@ export function EntryForm({
           return;
         }
       }
-      setError(cause instanceof Error ? cause.message : "Unable to save entry");
+      setError(cause instanceof Error ? cause.message : t("unableToSaveEntry"));
     }
   }
 
   return (
-    <div className={embedded ? "w-full" : "max-w-[720px] space-y-6"}>
+    <div
+      className={embedded ? "w-full min-w-0 max-w-full" : "w-full min-w-0 max-w-[720px] space-y-6"}
+    >
       {showTypeSelector ? (
         <div className="h-fit border border-[var(--hairline)] bg-[#f4f7fb] p-2">
           {(
             [
-              { label: "Exchange", value: "exchange" },
-              { label: "Cash ↔ Bank", value: "cash-bank" },
-              { label: "Expenses", value: "expense" },
+              { label: t("exchange"), value: "exchange" },
+              { label: t("cashBank"), value: "cash-bank" },
+              { label: t("expenses"), value: "expense" },
             ] as const
           ).map((option) => (
             <button
@@ -231,52 +236,37 @@ export function EntryForm({
         {!embedded ? (
           <div className="border-b border-[var(--hairline)] px-5 py-5 sm:px-7">
             <p className="text-xs font-semibold tracking-[0.08em] text-[var(--primary)] uppercase">
-              Add Transaction
+              {t("addTransaction")}
             </p>
             <h2 className="mt-2 font-[var(--font-display)] text-2xl font-medium text-[var(--ink)]">
               {entryType === "exchange"
-                ? "Exchange"
+                ? t("exchange")
                 : entryType === "cash-bank"
-                  ? "Cash ↔ Bank"
-                  : "Expenses"}
+                  ? t("cashBank")
+                  : t("expenses")}
             </h2>
           </div>
         ) : null}
 
-        <div className="grid items-start gap-5 p-5 sm:p-7">
-          <Field label="Date">
-            <Input
+        <div className="grid w-full min-w-0 max-w-full items-start gap-5 p-5 sm:p-7">
+          <Field label={t("dateTime")}>
+            <DateTimeInput
               autoFocus={embedded}
               disabled={isPending}
-              name="transactionDate"
+              name="transactionDateTime"
               onChange={(event) => {
-                setTransactionDate(event.target.value);
+                setTransactionDateTime(event.target.value);
                 setStaleRates(null);
               }}
               required
-              type="date"
-              value={transactionDate}
-            />
-          </Field>
-
-          <Field label="Time">
-            <Input
-              disabled={isPending}
-              name="transactionTime"
-              onChange={(event) => {
-                setTransactionTime(event.target.value);
-                setStaleRates(null);
-              }}
-              required
-              type="time"
-              value={transactionTime}
+              value={transactionDateTime}
             />
           </Field>
 
           {entryType === "exchange" ? (
             <>
-              <Field label="Direction">
-                <select
+              <Field label={t("direction")}>
+                <FormSelect
                   className={selectClass}
                   disabled={isPending}
                   onChange={(event) => {
@@ -286,9 +276,9 @@ export function EntryForm({
                   }}
                   value={direction}
                 >
-                  <option value="thb-to-mmk">THB to MMK</option>
-                  <option value="mmk-to-thb">MMK to THB</option>
-                </select>
+                  <option value="thb-to-mmk">{t("thbToMmk")}</option>
+                  <option value="mmk-to-thb">{t("mmkToThb")}</option>
+                </FormSelect>
               </Field>
               <Field label={direction === "thb-to-mmk" ? "IN THB" : "IN MMK"}>
                 <Input
@@ -307,7 +297,7 @@ export function EntryForm({
                     className="border border-[var(--hairline)] bg-[#f4f7fb] p-5 text-sm text-[var(--ink-muted)]"
                     role="status"
                   >
-                    Finding rate…
+                    {t("findingRate")}
                   </div>
                 ) : rateQuery.error ? (
                   <div
@@ -321,10 +311,10 @@ export function EntryForm({
                     <div className="flex flex-col gap-3 border-b border-[var(--hairline)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-semibold tracking-[0.1em] text-[var(--primary)] uppercase">
-                          Rate in use
+                          {t("rateInUse")}
                         </p>
                         <p className="mt-1 text-xs text-[var(--ink-muted)]">
-                          Effective {formatYangonDateTime(selectedRate.effectiveAt)}
+                          {t("effective")} {formatYangonDateTime(selectedRate.effectiveAt)}
                         </p>
                       </div>
                       <Button
@@ -336,15 +326,15 @@ export function EntryForm({
                         type="button"
                         variant="outline"
                       >
-                        {overrideEnabled ? "Cancel Override" : "Override Spread"}
+                        {overrideEnabled ? t("cancelOverride") : t("overrideSpread")}
                       </Button>
                     </div>
                     <div className="grid grid-cols-2 gap-px bg-[var(--hairline)] sm:grid-cols-4">
                       {[
-                        ["Base", formatRate(selectedRate.baseRate)],
-                        ["Spread", formatRate(appliedSpread)],
+                        [t("baseRate"), formatRate(selectedRate.baseRate)],
+                        [t("spread"), formatRate(appliedSpread)],
                         [
-                          direction === "thb-to-mmk" ? "Sell Rate" : "Buy Rate",
+                          direction === "thb-to-mmk" ? t("sellRate") : t("buyRate"),
                           formatRate(
                             direction === "thb-to-mmk"
                               ? String(Number(selectedRate.baseRate) + Number(appliedSpread))
@@ -373,12 +363,12 @@ export function EntryForm({
                   </div>
                 ) : (
                   <div className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-4">
-                    <p className="font-semibold text-[var(--ink)]">No active rate</p>
+                    <p className="font-semibold text-[var(--ink)]">{t("noActiveRate")}</p>
                     <Link
                       className="mt-2 inline-block text-sm font-semibold text-[var(--primary)] underline underline-offset-4"
                       href="/dashboard/exchange-rates"
                     >
-                      Open Exchange Rate
+                      {t("openExchangeRate")}
                     </Link>
                   </div>
                 )}
@@ -386,7 +376,7 @@ export function EntryForm({
 
               {overrideEnabled ? (
                 <>
-                  <Field label="Override Spread">
+                  <Field label={t("overrideSpread")}>
                     <Input
                       disabled={isPending}
                       inputMode="decimal"
@@ -395,7 +385,7 @@ export function EntryForm({
                       value={overrideSpread}
                     />
                   </Field>
-                  <Field label="Reason">
+                  <Field label={t("reason")}>
                     <Input
                       disabled={isPending}
                       minLength={3}
@@ -413,7 +403,7 @@ export function EntryForm({
                   value={calculation ? formatWholePayout(calculation.calculatedPayout) : ""}
                 />
               </Field>
-              <Field label={direction === "thb-to-mmk" ? "Actual MMK" : "Actual THB"}>
+              <Field label={direction === "thb-to-mmk" ? t("actualMmk") : t("actualThb")}>
                 <Input
                   disabled={isPending}
                   inputMode="numeric"
@@ -432,19 +422,19 @@ export function EntryForm({
               {calculation?.actualSettlementProfitThb ? (
                 <div className="grid gap-3 border border-[var(--hairline)] bg-white p-4 text-xs sm:grid-cols-3">
                   <div>
-                    <p className="text-[var(--ink-muted)]">Profit</p>
+                    <p className="text-[var(--ink-muted)]">{t("profit")}</p>
                     <p className="mt-1 font-semibold tabular-nums">
                       {calculation.formulaProfitThb} THB
                     </p>
                   </div>
                   <div>
-                    <p className="text-[var(--ink-muted)]">Actual settlement</p>
+                    <p className="text-[var(--ink-muted)]">{t("actualSettlement")}</p>
                     <p className="mt-1 font-semibold tabular-nums">
                       {calculation.actualSettlementProfitThb} THB
                     </p>
                   </div>
                   <div>
-                    <p className="text-[var(--ink-muted)]">Variance</p>
+                    <p className="text-[var(--ink-muted)]">{t("variance")}</p>
                     <p className="mt-1 font-semibold tabular-nums">
                       {calculation.settlementVarianceThb} THB
                     </p>
@@ -453,14 +443,14 @@ export function EntryForm({
               ) : null}
               {staleRates ? (
                 <div className="border-l-4 border-[var(--warning)] bg-[#fff8df] p-4">
-                  <p className="font-semibold text-[var(--ink)]">The active rate changed.</p>
+                  <p className="font-semibold text-[var(--ink)]">{t("theActiveRateChanged")}</p>
                   <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
                     <p>
-                      Displayed: {formatRate(staleRates.old.baseRate)} ·{" "}
+                      {t("displayed")}: {formatRate(staleRates.old.baseRate)} ·{" "}
                       {formatYangonDateTime(staleRates.old.effectiveAt)}
                     </p>
                     <p>
-                      New: {formatRate(staleRates.next.baseRate)} ·{" "}
+                      {t("new")}: {formatRate(staleRates.next.baseRate)} ·{" "}
                       {formatYangonDateTime(staleRates.next.effectiveAt)}
                     </p>
                   </div>
@@ -473,7 +463,7 @@ export function EntryForm({
                       size="sm"
                       type="button"
                     >
-                      Use New Rate
+                      {t("useNewRate")}
                     </Button>
                     <Button
                       onClick={() => setStaleRates({ ...staleRates, keepOld: true })}
@@ -481,12 +471,12 @@ export function EntryForm({
                       type="button"
                       variant="outline"
                     >
-                      Keep Displayed Rate
+                      {t("keepDisplayedRate")}
                     </Button>
                   </div>
                   {staleRates.keepOld ? (
                     <div className="mt-4">
-                      <Field label="Reason">
+                      <Field label={t("reason")}>
                         <Input
                           minLength={3}
                           onChange={(event) => setOverrideReason(event.target.value)}
@@ -501,8 +491,8 @@ export function EntryForm({
             </>
           ) : entryType === "cash-bank" ? (
             <>
-              <Field label="Currency">
-                <select
+              <Field label={t("currency")}>
+                <FormSelect
                   className={selectClass}
                   disabled={isPending}
                   name="currency"
@@ -511,15 +501,15 @@ export function EntryForm({
                 >
                   <option value="MMK">MMK</option>
                   <option value="THB">THB</option>
-                </select>
+                </FormSelect>
               </Field>
-              <Field label="Direction">
-                <select className={selectClass} disabled={isPending} name="direction" required>
-                  <option value="bank-to-cash">Bank In → Cash Out</option>
-                  <option value="cash-to-bank">Cash In → Bank Out</option>
-                </select>
+              <Field label={t("direction")}>
+                <FormSelect className={selectClass} disabled={isPending} name="direction" required>
+                  <option value="bank-to-cash">{t("bankInCashOut")}</option>
+                  <option value="cash-to-bank">{t("cashInBankOut")}</option>
+                </FormSelect>
               </Field>
-              <Field label="Amount">
+              <Field label={t("amount")}>
                 <Input
                   disabled={isPending}
                   inputMode="decimal"
@@ -528,23 +518,23 @@ export function EntryForm({
                   required
                 />
               </Field>
-              <Field label="Fee Rate">
-                <select className={selectClass} disabled={isPending} name="feeRate" required>
+              <Field label={t("feeRate")}>
+                <FormSelect className={selectClass} disabled={isPending} name="feeRate" required>
                   {cashCurrency === "MMK" ? <option value="0.01">1%</option> : null}
                   {cashCurrency === "THB" ? <option value="0.02">2%</option> : null}
                   {cashCurrency === "THB" ? <option value="0.03">3%</option> : null}
-                </select>
+                </FormSelect>
               </Field>
             </>
           ) : (
             <>
-              <Field label="Currency">
-                <select className={selectClass} disabled={isPending} name="currency" required>
+              <Field label={t("currency")}>
+                <FormSelect className={selectClass} disabled={isPending} name="currency" required>
                   <option value="THB">THB</option>
                   <option value="MMK">MMK</option>
-                </select>
+                </FormSelect>
               </Field>
-              <Field label="Amount">
+              <Field label={t("amount")}>
                 <Input
                   disabled={isPending}
                   inputMode="decimal"
@@ -556,7 +546,7 @@ export function EntryForm({
             </>
           )}
           <div>
-            <Field label={entryType === "expense" ? "Particular" : "Description"}>
+            <Field label={entryType === "expense" ? t("particular") : t("description")}>
               <Input disabled={isPending} name="description" required={entryType === "expense"} />
             </Field>
           </div>
@@ -588,7 +578,7 @@ export function EntryForm({
             type="reset"
             variant="outline"
           >
-            Reset
+            {t("reset")}
           </Button>
           <Button
             disabled={
@@ -598,7 +588,7 @@ export function EntryForm({
             }
             type="submit"
           >
-            {isPending ? "Saving…" : "Save Entry"}
+            {isPending ? t("saving") : t("saveEntry")}
           </Button>
         </div>
       </form>

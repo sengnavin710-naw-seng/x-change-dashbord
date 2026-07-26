@@ -23,6 +23,11 @@ export function toYangonIso(date: string, time: string) {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
 }
 
+export function toYangonIsoFromLocalDateTime(value: string) {
+  const [date = "", time = ""] = value.split("T");
+  return toYangonIso(date, time.slice(0, 5));
+}
+
 export function formatYangonDateTime(value: string) {
   return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",

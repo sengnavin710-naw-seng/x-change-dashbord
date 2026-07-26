@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 
 import { normalizeMoneyInput } from "@repo/api/operations";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
 
 import { trpc } from "@/trpc/client";
+import { useLanguage } from "../../language-provider";
 
 export interface BalanceConfiguration {
   calculationStartDate: string;
@@ -20,8 +21,6 @@ export interface BalanceConfiguration {
 
 const moneyFields = ["openingThb", "openingMmk", "checkpointThb", "checkpointMmk"] as const;
 const moneyPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/;
-const moneyFieldError = "Use numbers with up to 4 decimals.";
-
 type MoneyField = (typeof moneyFields)[number];
 type MoneyFieldErrors = Partial<Record<MoneyField, string>>;
 
@@ -35,10 +34,58 @@ function nextCalendarDate(date: string) {
   return next.toISOString().slice(0, 10);
 }
 
-function submissionError(cause: unknown) {
-  if (!(cause instanceof Error)) return "Unable to save balance setup.";
-  if (cause.message.includes("invalid_format")) return "Check the highlighted amount fields.";
+function submissionError(cause: unknown, fallback: string, invalidAmountMessage: string) {
+  if (!(cause instanceof Error)) return fallback;
+  if (cause.message.includes("invalid_format")) return invalidAmountMessage;
   return cause.message;
+}
+
+function formatMoneyInput(value: string | undefined) {
+  if (!value) return undefined;
+
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+  if (!match) return value;
+
+  const whole = new Intl.NumberFormat("en-US").format(BigInt(match[1] ?? "0"));
+  const fraction = (match[2] ?? "").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
+function showDatePicker(input: HTMLInputElement) {
+  if (input.disabled || typeof input.showPicker !== "function") return false;
+
+  input.focus({ preventScroll: true });
+
+  try {
+    input.showPicker();
+    return true;
+  } catch {
+    // The native date input remains usable when a browser does not expose showPicker.
+    return false;
+  }
+}
+
+function handleDatePickerKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+
+  if (showDatePicker(event.currentTarget)) event.preventDefault();
+}
+
+function handleDatePickerPointerDown(event: PointerEvent<HTMLInputElement>) {
+  if (showDatePicker(event.currentTarget)) event.preventDefault();
+}
+
+function CalendarIcon() {
+  return (
+    <svg aria-hidden="true" className="pointer-events-none size-5" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
 }
 
 export function BalanceConfigurationForm({
@@ -55,6 +102,7 @@ export function BalanceConfigurationForm({
   onSaved?: () => void;
 }>) {
   const router = useRouter();
+  const { t } = useLanguage();
   const mutation = trpc.operations.saveBalanceConfiguration.useMutation();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,12 +136,14 @@ export function BalanceConfigurationForm({
     const nextFieldErrors: MoneyFieldErrors = {};
 
     for (const field of moneyFields) {
-      if (!moneyPattern.test(amounts[field])) nextFieldErrors[field] = moneyFieldError;
+      if (!moneyPattern.test(amounts[field])) {
+        nextFieldErrors[field] = t("useNumbersUpToFourDecimals");
+      }
     }
 
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors);
-      setError("Check the highlighted amount fields.");
+      setError(t("checkHighlightedAmounts"));
       return;
     }
 
@@ -110,110 +160,112 @@ export function BalanceConfigurationForm({
       if (onSaved) {
         onSaved();
       } else {
-        setMessage("Balance setup saved.");
+        setMessage(t("balanceSetupSaved"));
       }
     } catch (cause) {
-      setError(submissionError(cause));
+      setError(submissionError(cause, t("unableToSaveBalanceSetup"), t("checkHighlightedAmounts")));
     }
   }
 
   return (
-    <form
-      className={embedded ? "bg-white" : "max-w-[720px] border border-[var(--hairline)] bg-white"}
-      onSubmit={submit}
-    >
-      {!embedded ? (
-        <div className="border-b border-[var(--hairline)] px-5 py-4 sm:px-7">
-          <h2 className="text-lg font-semibold text-[var(--ink)]">
-            {initial ? "Edit Balance Setup" : "Set Up Balances"}
-          </h2>
-        </div>
-      ) : null}
-      <div className="grid gap-6 p-5 sm:p-7">
-        <fieldset className="grid gap-5">
-          <legend className="mb-1 text-sm font-semibold text-[var(--ink)]">Opening Balance</legend>
-          <MoneyField
-            defaultValue={initial?.openingThb}
-            disabled={mutation.isPending}
-            error={fieldErrors.openingThb}
-            label="Opening Balance THB"
-            name="openingThb"
-            onChange={() => clearFieldError("openingThb")}
-            placeholder="235,299"
-          />
-          <MoneyField
-            defaultValue={initial?.openingMmk}
-            disabled={mutation.isPending}
-            error={fieldErrors.openingMmk}
-            label="Opening Balance MMK"
-            name="openingMmk"
-            onChange={() => clearFieldError("openingMmk")}
-            placeholder="5,918,129"
-          />
+    <form className="w-full max-w-[840px]" onSubmit={submit}>
+      <div className="grid items-start gap-5 lg:grid-cols-[360px_460px]">
+        <fieldset className="min-w-0 border border-[var(--hairline)] bg-white">
+          <legend className="sr-only">{t("openingBalance")}</legend>
+          <div className="border-b border-[var(--hairline)] px-5 py-4">
+            <h2 className="text-base font-semibold text-[var(--ink)]">{t("openingBalance")}</h2>
+          </div>
+          <div className="grid gap-5 p-5">
+            <MoneyField
+              defaultValue={initial?.openingThb}
+              disabled={mutation.isPending}
+              error={fieldErrors.openingThb}
+              label="THB"
+              name="openingThb"
+              onChange={() => clearFieldError("openingThb")}
+            />
+            <MoneyField
+              defaultValue={initial?.openingMmk}
+              disabled={mutation.isPending}
+              error={fieldErrors.openingMmk}
+              label="MMK"
+              name="openingMmk"
+              onChange={() => clearFieldError("openingMmk")}
+            />
+          </div>
         </fieldset>
 
-        <fieldset className="grid gap-5 border-t border-[var(--hairline)] pt-6">
-          <legend className="px-0 text-sm font-semibold text-[var(--ink)]">
-            Previous Closing Balance
-          </legend>
-          <label className="space-y-2">
-            <span className="block text-sm font-semibold text-[var(--ink)]">
-              Previous Closing Date
-            </span>
-            <Input
-              defaultValue={defaultCheckpointDate}
-              disabled={mutation.isPending}
-              name="checkpointDate"
-              required
-              type="date"
-            />
-          </label>
-          <MoneyField
-            defaultValue={initial?.checkpointThb}
-            disabled={mutation.isPending}
-            error={fieldErrors.checkpointThb}
-            label="Previous Closing Balance THB"
-            name="checkpointThb"
-            onChange={() => clearFieldError("checkpointThb")}
-            placeholder="128,200"
-          />
-          <MoneyField
-            defaultValue={initial?.checkpointMmk}
-            disabled={mutation.isPending}
-            error={fieldErrors.checkpointMmk}
-            label="Previous Closing Balance MMK"
-            name="checkpointMmk"
-            onChange={() => clearFieldError("checkpointMmk")}
-            placeholder="17,407,355"
-          />
-        </fieldset>
-
-        <fieldset className="grid gap-5 border-t border-[var(--hairline)] pt-6">
-          <legend className="px-0 text-sm font-semibold text-[var(--ink)]">
-            Additional Information
-          </legend>
-          <label className="space-y-2">
-            <span className="block text-sm font-semibold text-[var(--ink)]">Note (Optional)</span>
-            <Input
-              defaultValue={initial?.note ?? ""}
-              disabled={mutation.isPending}
-              maxLength={500}
-              name="note"
-            />
-          </label>
-          {initial ? (
+        <fieldset className="min-w-0 border border-[var(--hairline)] bg-white">
+          <legend className="sr-only">{t("currencyExchangeBalance")}</legend>
+          <div className="border-b border-[var(--hairline)] px-5 py-4">
+            <h2 className="text-base font-semibold text-[var(--ink)]">
+              {t("currencyExchangeBalance")}
+            </h2>
+          </div>
+          <div className="grid gap-5 p-5">
             <label className="space-y-2">
               <span className="block text-sm font-semibold text-[var(--ink)]">
-                Edit Reason (Optional)
+                {t("balanceDate")}
               </span>
-              <Input disabled={mutation.isPending} maxLength={500} name="reason" />
+              <span className="relative block">
+                <Input
+                  className="relative cursor-pointer pr-11 tabular-nums [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  defaultValue={defaultCheckpointDate}
+                  disabled={mutation.isPending}
+                  name="checkpointDate"
+                  onKeyDown={handleDatePickerKeyDown}
+                  onPointerDown={handleDatePickerPointerDown}
+                  required
+                  type="date"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[var(--ink-secondary)]">
+                  <CalendarIcon />
+                </span>
+              </span>
             </label>
-          ) : null}
+            <MoneyField
+              defaultValue={initial?.checkpointThb}
+              disabled={mutation.isPending}
+              error={fieldErrors.checkpointThb}
+              label="THB"
+              name="checkpointThb"
+              onChange={() => clearFieldError("checkpointThb")}
+            />
+            <MoneyField
+              defaultValue={initial?.checkpointMmk}
+              disabled={mutation.isPending}
+              error={fieldErrors.checkpointMmk}
+              label="MMK"
+              name="checkpointMmk"
+              onChange={() => clearFieldError("checkpointMmk")}
+            />
+            <div className="grid gap-5 border-t border-[var(--hairline)] pt-5">
+              <label className="space-y-2">
+                <span className="block text-sm font-semibold text-[var(--ink)]">
+                  {t("noteOptional")}
+                </span>
+                <Input
+                  defaultValue={initial?.note ?? ""}
+                  disabled={mutation.isPending}
+                  maxLength={500}
+                  name="note"
+                />
+              </label>
+              {initial ? (
+                <label className="space-y-2">
+                  <span className="block text-sm font-semibold text-[var(--ink)]">
+                    {t("reasonForChangeOptional")}
+                  </span>
+                  <Input disabled={mutation.isPending} maxLength={500} name="reason" />
+                </label>
+              ) : null}
+            </div>
+          </div>
         </fieldset>
       </div>
       {error ? (
         <p
-          className="mx-5 mb-5 border-l-4 border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm sm:mx-7"
+          className="mt-5 border-l-4 border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm"
           role="alert"
         >
           {error}
@@ -221,17 +273,17 @@ export function BalanceConfigurationForm({
       ) : null}
       {message ? (
         <p
-          className="mx-5 mb-5 border-l-4 border-[var(--success)] bg-[#e8f8f0] p-3 text-sm sm:mx-7"
+          className="mt-5 border-l-4 border-[var(--success)] bg-[#e8f8f0] p-3 text-sm"
           role="status"
         >
           {message}
         </p>
       ) : null}
       <div
-        className={`${embedded ? "sticky bottom-0" : ""} flex justify-end border-t border-[var(--hairline)] bg-[#f9fafb] px-5 py-4 sm:px-7`}
+        className={`${embedded ? "sticky bottom-0" : ""} mt-5 flex justify-end border border-[var(--hairline)] bg-[#f9fafb] px-5 py-4`}
       >
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? "Saving…" : initial ? "Save Changes" : "Save Balance Setup"}
+          {mutation.isPending ? t("saving") : initial ? t("saveChanges") : t("saveBalanceSetup")}
         </Button>
       </div>
     </form>
@@ -245,7 +297,6 @@ function MoneyField({
   label,
   name,
   onChange,
-  placeholder,
 }: Readonly<{
   defaultValue: string | undefined;
   disabled: boolean;
@@ -253,7 +304,6 @@ function MoneyField({
   label: string;
   name: MoneyField;
   onChange: () => void;
-  placeholder: string;
 }>) {
   const errorId = `${name}-error`;
 
@@ -263,12 +313,11 @@ function MoneyField({
       <Input
         aria-describedby={error ? errorId : undefined}
         aria-invalid={Boolean(error)}
-        defaultValue={defaultValue}
+        defaultValue={formatMoneyInput(defaultValue)}
         disabled={disabled}
         inputMode="decimal"
         name={name}
         onChange={onChange}
-        placeholder={placeholder}
         required
       />
       {error ? (

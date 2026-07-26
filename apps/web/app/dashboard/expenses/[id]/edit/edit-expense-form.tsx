@@ -6,8 +6,11 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
 
-import { getYangonDateTime, toYangonIso } from "@/lib/exchange-rate";
+import { getYangonDateTime, toYangonIsoFromLocalDateTime } from "@/lib/exchange-rate";
 import { trpc } from "@/trpc/client";
+
+import { DateTimeInput, FormSelect } from "../../../form-controls";
+import { useLanguage } from "../../../../language-provider";
 
 const selectClass =
   "h-11 w-full rounded-[4px] border border-[var(--hairline-soft)] bg-white px-3 text-sm text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2]";
@@ -27,6 +30,7 @@ function value(form: FormData, name: string) {
 
 export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>) {
   const router = useRouter();
+  const { t } = useLanguage();
   const utils = trpc.useUtils();
   const mutation = trpc.operations.updateExpense.useMutation();
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +47,13 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
         description: value(form, "description"),
         id: record.id,
         reason: value(form, "reason"),
-        transactionAt: toYangonIso(value(form, "transactionDate"), value(form, "transactionTime")),
+        transactionAt: toYangonIsoFromLocalDateTime(value(form, "transactionDateTime")),
       });
       await utils.dashboard.today.invalidate();
       router.push("/dashboard/expenses");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update record");
+      setError(cause instanceof Error ? cause.message : t("unableToUpdateRecord"));
     }
   }
 
@@ -57,28 +61,17 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
     <form className="max-w-[720px] border border-[var(--hairline)] bg-white" onSubmit={submit}>
       <div className="grid gap-5 p-5 sm:p-7 [&>label]:block">
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Date</span>
-          <Input
-            defaultValue={record.transactionDate}
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("dateTime")}</span>
+          <DateTimeInput
+            defaultValue={`${record.transactionDate}T${initialDateTime.time}`}
             disabled={mutation.isPending}
-            name="transactionDate"
+            name="transactionDateTime"
             required
-            type="date"
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Time</span>
-          <Input
-            defaultValue={initialDateTime.time}
-            disabled={mutation.isPending}
-            name="transactionTime"
-            required
-            type="time"
-          />
-        </label>
-        <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Currency</span>
-          <select
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("currency")}</span>
+          <FormSelect
             className={selectClass}
             defaultValue={record.currency}
             disabled={mutation.isPending}
@@ -86,10 +79,10 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
           >
             <option value="THB">THB</option>
             <option value="MMK">MMK</option>
-          </select>
+          </FormSelect>
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Amount</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("amount")}</span>
           <Input
             defaultValue={record.amount}
             disabled={mutation.isPending}
@@ -99,7 +92,7 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Particular</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("particular")}</span>
           <Input
             defaultValue={record.description}
             disabled={mutation.isPending}
@@ -108,7 +101,7 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
           />
         </label>
         <label className="space-y-2">
-          <span className="block text-sm font-semibold text-[var(--ink)]">Edit Reason</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">{t("editReason")}</span>
           <Input disabled={mutation.isPending} minLength={3} name="reason" required />
         </label>
       </div>
@@ -127,10 +120,10 @@ export function EditExpenseForm({ record }: Readonly<{ record: ExpenseRecord }>)
           type="button"
           variant="outline"
         >
-          Cancel
+          {t("cancel")}
         </Button>
         <Button disabled={mutation.isPending} type="submit">
-          {mutation.isPending ? "Updating…" : "Update Record"}
+          {mutation.isPending ? t("updating") : t("updateRecord")}
         </Button>
       </div>
     </form>

@@ -10,6 +10,9 @@ import {
   useTransition,
 } from "react";
 
+import type { MessageKey } from "../../../lib/i18n";
+import { useLanguage } from "../../language-provider";
+
 export type TransactionRange = "custom" | "last-month" | "month" | "today" | "week" | "yesterday";
 
 type TransactionType = "cash-bank" | "exchange" | "expense";
@@ -26,12 +29,12 @@ interface TransactionFiltersProps {
   type?: TransactionType;
 }
 
-const presets: ReadonlyArray<{ label: string; value: Exclude<TransactionRange, "custom"> }> = [
-  { label: "Today", value: "today" },
-  { label: "Yesterday", value: "yesterday" },
-  { label: "This Week", value: "week" },
-  { label: "This Month", value: "month" },
-  { label: "Last Month", value: "last-month" },
+const presets: ReadonlyArray<{ label: MessageKey; value: Exclude<TransactionRange, "custom"> }> = [
+  { label: "today", value: "today" },
+  { label: "yesterday", value: "yesterday" },
+  { label: "thisWeek", value: "week" },
+  { label: "thisMonth", value: "month" },
+  { label: "lastMonth", value: "last-month" },
 ];
 
 const selectClass =
@@ -111,6 +114,7 @@ export function TransactionFilters({
   type,
 }: Readonly<TransactionFiltersProps>) {
   const pathname = usePathname();
+  const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const dateContainerRef = useRef<HTMLDivElement>(null);
@@ -204,15 +208,15 @@ export function TransactionFilters({
   function applyCustomRange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!customFrom || !customTo) {
-      setDateError("Select both start and end dates.");
+      setDateError(t("selectBothDates"));
       return;
     }
     if (customFrom > customTo) {
-      setDateError("Start date must be before or the same as end date.");
+      setDateError(t("startDateBeforeEnd"));
       return;
     }
     if (customTo > today) {
-      setDateError("End date cannot be later than today.");
+      setDateError(t("endDateNotFuture"));
       return;
     }
 
@@ -252,7 +256,9 @@ export function TransactionFilters({
     <form className="space-y-4" onSubmit={applyCustomRange}>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-1.5">
-          <span className="text-xs font-semibold text-[var(--ink-secondary)]">Start Date</span>
+          <span className="text-xs font-semibold text-[var(--ink-secondary)]">
+            {t("startDate")}
+          </span>
           <input
             className="h-10 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-sm tabular-nums text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2]"
             max={today}
@@ -263,7 +269,7 @@ export function TransactionFilters({
           />
         </label>
         <label className="grid gap-1.5">
-          <span className="text-xs font-semibold text-[var(--ink-secondary)]">End Date</span>
+          <span className="text-xs font-semibold text-[var(--ink-secondary)]">{t("endDate")}</span>
           <input
             className="h-10 rounded-none border border-[var(--hairline-soft)] bg-white px-3 text-sm tabular-nums text-[var(--ink)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)/0.2]"
             max={today}
@@ -284,14 +290,14 @@ export function TransactionFilters({
         disabled={isPending}
         type="submit"
       >
-        Apply Date Range
+        {t("applyDateRange")}
       </button>
     </form>
   );
 
   return (
     <>
-      <div aria-busy={isPending} aria-label="Transaction filters" className="hidden lg:block">
+      <div aria-busy={isPending} aria-label={t("transactionFilters")} className="hidden lg:block">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative" ref={dateContainerRef}>
             <button
@@ -312,17 +318,17 @@ export function TransactionFilters({
               type="button"
             >
               <CalendarIcon />
-              Date
+              {t("date")}
             </button>
             {dateMenuOpen && !mobileOpen ? (
               <div
-                aria-label="Transaction date filter"
+                aria-label={`${t("transaction")} ${t("dateFilter")}`}
                 className="absolute top-full left-0 z-30 mt-2 w-[640px] max-w-[calc(100vw-22rem)] border border-[var(--hairline)] bg-white shadow-[0_12px_32px_rgba(0,21,60,0.12)]"
                 id="transaction-date-filter"
                 role="dialog"
               >
                 <div className="border-b border-[var(--hairline)] px-4 py-3">
-                  <p className="text-sm font-semibold text-[var(--ink)]">Date Filter</p>
+                  <p className="text-sm font-semibold text-[var(--ink)]">{t("dateFilter")}</p>
                 </div>
                 <div className="grid grid-cols-[190px_minmax(0,1fr)]">
                   <div className="border-r border-[var(--hairline)] p-3">
@@ -336,13 +342,15 @@ export function TransactionFilters({
                           onClick={() => choosePreset(preset.value)}
                           type="button"
                         >
-                          {preset.label}
+                          {t(preset.label)}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div className="p-4">
-                    <p className="mb-4 text-sm font-semibold text-[var(--ink)]">Custom Range</p>
+                    <p className="mb-4 text-sm font-semibold text-[var(--ink)]">
+                      {t("customRange")}
+                    </p>
                     {customRangeForm}
                   </div>
                 </div>
@@ -351,28 +359,28 @@ export function TransactionFilters({
           </div>
           <div className="relative min-w-[180px]">
             <select
-              aria-label="Transaction type"
+              aria-label={t("transactionType")}
               className={`${selectClass} w-full appearance-none pr-10`}
               disabled={isPending}
               onChange={(event) => changeSelect("type", event)}
               value={type ?? ""}
             >
-              <option value="">All Types</option>
-              <option value="exchange">Exchange</option>
-              <option value="cash-bank">Cash ↔ Bank</option>
-              <option value="expense">Expenses</option>
+              <option value="">{t("allTypes")}</option>
+              <option value="exchange">{t("exchange")}</option>
+              <option value="cash-bank">{t("cashBank")}</option>
+              <option value="expense">{t("expenses")}</option>
             </select>
             <ChevronDownIcon />
           </div>
           <div className="relative min-w-[180px]">
             <select
-              aria-label="Currency"
+              aria-label={t("currency")}
               className={`${selectClass} w-full appearance-none pr-10`}
               disabled={isPending}
               onChange={(event) => changeSelect("currency", event)}
               value={currency ?? ""}
             >
-              <option value="">All Currencies</option>
+              <option value="">{t("allCurrencies")}</option>
               <option value="THB">THB</option>
               <option value="MMK">MMK</option>
             </select>
@@ -380,14 +388,14 @@ export function TransactionFilters({
           </div>
           <div className="relative min-w-[180px]">
             <select
-              aria-label="Transaction order"
+              aria-label={`${t("transaction")} ${t("order")}`}
               className={`${selectClass} w-full appearance-none pr-10`}
               disabled={isPending}
               onChange={(event) => changeSelect("order", event)}
               value={order}
             >
-              <option value="newest">Newest → Oldest</option>
-              <option value="oldest">Oldest → Newest</option>
+              <option value="newest">{t("newestOldest")}</option>
+              <option value="oldest">{t("oldestNewest")}</option>
             </select>
             <ChevronDownIcon />
           </div>
@@ -398,7 +406,7 @@ export function TransactionFilters({
               onClick={resetFilters}
               type="button"
             >
-              Reset
+              {t("reset")}
             </button>
           ) : null}
         </div>
@@ -417,7 +425,7 @@ export function TransactionFilters({
           type="button"
         >
           <FilterIcon />
-          Filters
+          {t("filters")}
           {activeFilterCount > 0 ? (
             <span className="inline-flex min-w-5 items-center justify-center bg-[var(--primary)] px-1.5 py-0.5 text-[10px] text-white">
               {activeFilterCount}
@@ -436,15 +444,15 @@ export function TransactionFilters({
             }}
           >
             <section
-              aria-label="Transaction filters"
+              aria-label={t("transactionFilters")}
               aria-modal="true"
               className="max-h-[88vh] w-full overflow-y-auto border border-[var(--hairline)] bg-white sm:max-w-[560px]"
               role="dialog"
             >
               <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4">
-                <h2 className="text-base font-semibold text-[var(--ink)]">Filters</h2>
+                <h2 className="text-base font-semibold text-[var(--ink)]">{t("filters")}</h2>
                 <button
-                  aria-label="Close filters"
+                  aria-label={`${t("close")} ${t("filters")}`}
                   className="inline-flex size-10 items-center justify-center rounded-none border border-[var(--hairline-soft)] text-[var(--ink-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
                   onClick={() => {
                     setMobileOpen(false);
@@ -458,7 +466,9 @@ export function TransactionFilters({
 
               <div className="space-y-6 p-5">
                 <fieldset className="space-y-3">
-                  <legend className="text-sm font-semibold text-[var(--ink)]">Date Range</legend>
+                  <legend className="text-sm font-semibold text-[var(--ink)]">
+                    {t("dateRange")}
+                  </legend>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {presets.map((preset) => (
                       <button
@@ -469,7 +479,7 @@ export function TransactionFilters({
                         onClick={() => choosePreset(preset.value, true)}
                         type="button"
                       >
-                        {preset.label}
+                        {t(preset.label)}
                       </button>
                     ))}
                     <button
@@ -488,7 +498,7 @@ export function TransactionFilters({
                       type="button"
                     >
                       <CalendarIcon />
-                      Custom Range
+                      {t("customRange")}
                     </button>
                   </div>
                   {mobileCustomOpen ? (
@@ -499,7 +509,7 @@ export function TransactionFilters({
                 <div className="grid gap-4 border-t border-[var(--hairline)] pt-5">
                   <label className="grid gap-1.5">
                     <span className="text-xs font-semibold text-[var(--ink-secondary)]">
-                      Transaction Type
+                      {t("transactionType")}
                     </span>
                     <div className="relative">
                       <select
@@ -508,17 +518,17 @@ export function TransactionFilters({
                         onChange={(event) => changeSelect("type", event)}
                         value={type ?? ""}
                       >
-                        <option value="">All Types</option>
-                        <option value="exchange">Exchange</option>
-                        <option value="cash-bank">Cash ↔ Bank</option>
-                        <option value="expense">Expenses</option>
+                        <option value="">{t("allTypes")}</option>
+                        <option value="exchange">{t("exchange")}</option>
+                        <option value="cash-bank">{t("cashBank")}</option>
+                        <option value="expense">{t("expenses")}</option>
                       </select>
                       <ChevronDownIcon />
                     </div>
                   </label>
                   <label className="grid gap-1.5">
                     <span className="text-xs font-semibold text-[var(--ink-secondary)]">
-                      Currency
+                      {t("currency")}
                     </span>
                     <div className="relative">
                       <select
@@ -527,7 +537,7 @@ export function TransactionFilters({
                         onChange={(event) => changeSelect("currency", event)}
                         value={currency ?? ""}
                       >
-                        <option value="">All Currencies</option>
+                        <option value="">{t("allCurrencies")}</option>
                         <option value="THB">THB</option>
                         <option value="MMK">MMK</option>
                       </select>
@@ -535,7 +545,9 @@ export function TransactionFilters({
                     </div>
                   </label>
                   <label className="grid gap-1.5">
-                    <span className="text-xs font-semibold text-[var(--ink-secondary)]">Order</span>
+                    <span className="text-xs font-semibold text-[var(--ink-secondary)]">
+                      {t("order")}
+                    </span>
                     <div className="relative">
                       <select
                         className={`${selectClass} w-full appearance-none pr-10`}
@@ -543,8 +555,8 @@ export function TransactionFilters({
                         onChange={(event) => changeSelect("order", event)}
                         value={order}
                       >
-                        <option value="newest">Newest → Oldest</option>
-                        <option value="oldest">Oldest → Newest</option>
+                        <option value="newest">{t("newestOldest")}</option>
+                        <option value="oldest">{t("oldestNewest")}</option>
                       </select>
                       <ChevronDownIcon />
                     </div>
@@ -558,7 +570,7 @@ export function TransactionFilters({
                     onClick={resetFilters}
                     type="button"
                   >
-                    Reset Filters
+                    {t("resetFilters")}
                   </button>
                 ) : null}
               </div>

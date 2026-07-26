@@ -8,6 +8,7 @@ import {
   test,
 } from "bun:test";
 import { count } from "drizzle-orm";
+import { toNextJsHandler } from "better-auth/next-js";
 
 import { session } from "@repo/db";
 
@@ -39,12 +40,13 @@ afterAll(async () => {
   await testDatabase.pool.end();
 });
 
-function setup(allowSignUp = true) {
+function setup(allowSignUp = true, trustedOrigins?: string[]) {
   const auth = createAuth({
     allowSignUp,
     baseURL,
     database: testDatabase.db,
     secret: testSecret,
+    ...(trustedOrigins !== undefined ? { trustedOrigins } : {}),
   });
   const accounts = createAccountService({ auth, database: testDatabase.db });
   return { accounts, auth };
@@ -59,6 +61,22 @@ function authRequest(
     new Request(`${baseURL}/api/auth${path}`, {
       body: JSON.stringify(body),
       headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+  );
+}
+
+function browserSignInRequest(auth: Auth, origin: string, body: Record<string, unknown>) {
+  return toNextJsHandler(auth).POST(
+    new Request(`${origin}/api/auth/sign-in/email`, {
+      body: JSON.stringify(body),
+      headers: {
+        "content-type": "application/json",
+        origin,
+        referer: `${origin}/login`,
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+      },
       method: "POST",
     }),
   );
@@ -91,6 +109,28 @@ describe("provisioned account authentication", () => {
     });
 
     const response = await signIn(auth, "employee@example.com", "correct-horse-battery-staple");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("better-auth.session_token");
+  });
+
+  test("a provisioned user can sign in from an explicitly trusted LAN origin", async () => {
+    const lanOrigin = "http://192.168.110.119:3000";
+    const { accounts, auth } = setup(true, [lanOrigin]);
+    expect(auth.options.trustedOrigins).toContain(lanOrigin);
+
+    await accounts.provisionUser({
+      email: "lan-employee@example.com",
+      name: "LAN Employee",
+      password: "correct-horse-battery-staple",
+    });
+
+    const response = await browserSignInRequest(auth, lanOrigin, {
+      callbackURL: "/dashboard",
+      email: "lan-employee@example.com",
+      password: "correct-horse-battery-staple",
+      rememberMe: true,
+    });
 
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("better-auth.session_token");
