@@ -6,6 +6,18 @@ Authentication uses administrator-provisioned email/password accounts with no pu
 registration. The authenticated workspace includes the initial exchange, Cash/Bank,
 expense, opening-reconciliation, daily-summary, and retrospective-correction foundation.
 
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Business rules](docs/BUSINESS_RULES.md)
+- [Database and migrations](docs/DATABASE.md)
+- [Dependencies](docs/DEPENDENCIES.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Operations runbook](docs/OPERATIONS.md)
+- [Testing](docs/TESTING.md)
+- [Security policy](SECURITY.md)
+- [Design system](DESIGN.md)
+
 ## Prerequisites
 
 - [Bun](https://bun.sh/) 1.3 or newer
